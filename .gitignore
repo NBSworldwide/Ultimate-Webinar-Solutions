@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+.data/
+.env
+.env.*
+*.tsbuildinfo
+artifacts/
+lighthouse*.html
+lighthouse*.json
+reports/
+!.env.example
+*.log
+coverage/
+playwright-report/
+test-results/

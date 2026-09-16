@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Webinar Studio</title>
+  <rect width="64" height="64" rx="16" fill="#102a43" />
+  <path d="M18 18h28v20H18z" fill="#f7fbff" />
+  <path d="m25 44 7-7 7 7" fill="none" stroke="#f7fbff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4" />
+  <path d="M25 25h14M25 31h9" fill="none" stroke="#12b5cb" stroke-linecap="round" stroke-width="4" />
+</svg>
