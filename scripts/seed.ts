@@ -1,5 +1,8 @@
+import { loadProjectEnv } from "./load-env";
 import { closeDatabase, getDb } from "@/lib/db";
 import { seedSyntheticSamples } from "@/lib/sample-seed";
+
+loadProjectEnv();
 
 async function main(): Promise<void> {
   try {

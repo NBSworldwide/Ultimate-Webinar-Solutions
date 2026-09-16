@@ -1,5 +1,8 @@
+import { loadProjectEnv } from "./load-env";
 import { closeDatabase, getDb } from "@/lib/db";
 import { runMigrations } from "@/lib/migrations";
+
+loadProjectEnv();
 
 async function main(): Promise<void> {
   try {

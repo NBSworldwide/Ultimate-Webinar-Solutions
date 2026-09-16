@@ -1,6 +1,9 @@
+import { loadProjectEnv } from "./load-env";
 import { randomUUID } from "node:crypto";
 import { closeDatabase, getDb, assertStandaloneDataset } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+
+loadProjectEnv();
 
 async function main(): Promise<void> {
   try {
