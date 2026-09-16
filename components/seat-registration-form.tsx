@@ -8,9 +8,11 @@ import type { HoldResult, TierView } from "@/lib/types";
 interface SeatRegistrationFormProps {
   webinarId: string;
   tiers: TierView[];
+  successHref?: string;
+  successCtaLabel?: string;
 }
 
-export function SeatRegistrationForm({ webinarId, tiers }: SeatRegistrationFormProps) {
+export function SeatRegistrationForm({ webinarId, tiers, successHref = "/login", successCtaLabel = "Open attendee account" }: SeatRegistrationFormProps) {
   const [activeTierId, setActiveTierId] = useState(tiers[0]?.id ?? "");
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [hold, setHold] = useState<HoldResult | null>(null);
@@ -77,7 +79,7 @@ export function SeatRegistrationForm({ webinarId, tiers }: SeatRegistrationFormP
   }
 
   if (status === "success") {
-    return <div className="registration-card"><div className="empty-icon"><Check size={21} /></div><h2>Registration confirmed</h2><p>{message}</p><div className="notice-banner"><ShieldCheck size={17} /><span>Demo mode is active. No payment provider or message is contacted from this local application.</span></div><a className="button" href="/login">Open attendee account</a></div>;
+    return <div className="registration-card"><div className="empty-icon"><Check size={21} /></div><h2>Registration confirmed</h2><p>{message}</p><div className="notice-banner"><ShieldCheck size={17} /><span>Demo mode is active. No payment provider or message is contacted from this local application.</span></div><a className="button" href={successHref}>{successCtaLabel}</a></div>;
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarDays, CircleHelp, LayoutDashboard, Layers3, Settings2, Sparkles, UsersRound } from "lucide-react";
+import { BarChart3, CalendarDays, CircleHelp, LayoutDashboard, Layers3, LockKeyhole, Settings2, Sparkles, UsersRound } from "lucide-react";
 import type { User } from "@/lib/types";
 import { initials } from "@/lib/format";
 import { LogoutButton } from "@/components/logout-button";
@@ -10,8 +10,9 @@ import { LogoutButton } from "@/components/logout-button";
 const navigation = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/webinars", label: "Webinars", icon: CalendarDays },
-  { href: "/admin/registrations", label: "Registrations", icon: UsersRound },
-  { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+          { href: "/admin/registrations", label: "Registrations", icon: UsersRound },
+  { href: "/admin/private-webinars", label: "Private webinars", icon: LockKeyhole },
+          { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/admin/playbooks", label: "Playbooks", icon: Layers3 },
 ];
 

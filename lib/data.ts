@@ -1,17 +1,22 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { assertStandaloneDataset, getDb, isDemoMode, type DatabaseClient, type DatabaseRow } from "@/lib/db";
+import { generateInviteCode, hashInviteCode, hashPrivateAccessToken, normalizeInviteEmail } from "@/lib/private-access-core";
 import type {
   CustomerReplayAccess,
   DashboardData,
   HoldResult,
+  PricingModel,
+  PricingRounding,
   PublicWebinarDetails,
   PublicWebinarListItem,
   RegistrationView,
   SeatStatus,
   TierView,
   WebinarDetails,
+  WebinarInviteView,
   WebinarListItem,
   WebinarStatus,
+  WebinarVisibility,
 } from "@/lib/types";
 
 export const HOLD_MINUTES = 10;
@@ -37,6 +42,7 @@ type WebinarRow = DatabaseRow & {
   duration_minutes: number;
   timezone: string;
   status: WebinarStatus;
+  visibility: WebinarVisibility;
   provider: string;
   host_name: string;
   host_bio: string;
@@ -78,6 +84,7 @@ function toWebinarListItem(row: WebinarRow): WebinarListItem {
     durationMinutes: Number(row.duration_minutes),
     timezone: row.timezone,
     status: row.status,
+    visibility: row.visibility,
     provider: row.provider,
     hostName: row.host_name,
     accent: row.accent,
@@ -110,7 +117,7 @@ function toRegistration(row: RegistrationRow): RegistrationView {
 
 async function webinarSummaryRows(publicOnly = false): Promise<WebinarRow[]> {
   await assertStandaloneDataset();
-  const where = publicOnly ? "WHERE w.status IN ('published', 'sold_out')" : "";
+  const where = publicOnly ? "WHERE w.visibility = 'public' AND w.status IN ('published', 'sold_out')" : "";
   const { rows } = await getDb().query<WebinarRow>(`
     SELECT
       w.id,
@@ -123,6 +130,7 @@ async function webinarSummaryRows(publicOnly = false): Promise<WebinarRow[]> {
       w.duration_minutes,
       w.timezone,
       w.status,
+      w.visibility,
       w.provider,
       w.host_name,
       w.host_bio,
@@ -150,7 +158,7 @@ export async function getWebinars(publicOnly = false): Promise<WebinarListItem[]
 }
 
 export async function getPublicWebinars(): Promise<PublicWebinarListItem[]> {
-  return (await getWebinars(true)).map(({ revenueCents: _revenueCents, ...webinar }) => webinar);
+  return (await getWebinars(true)).map(({ revenueCents: _revenueCents, visibility: _visibility, ...webinar }) => webinar);
 }
 
 async function registrationsForWebinar(webinarId: string, client?: DatabaseClient): Promise<RegistrationView[]> {
@@ -192,8 +200,8 @@ async function webinarDetailsById(id: string, includeRegistrations: boolean): Pr
   const [detailsResult, tiersResult, seatsResult] = await Promise.all([
     database.query<Pick<WebinarRow, "host_bio" | "long_description" | "replay_label" | "replay_url">>(
       "SELECT host_bio, long_description, replay_label, replay_url FROM webinars WHERE id = $1", [id]),
-    database.query<{ id: string; name: string; price_cents: number; capacity: number }>(
-      "SELECT id, name, price_cents, capacity FROM tiers WHERE webinar_id = $1 ORDER BY sort_order ASC", [id]),
+    database.query<{ id: string; name: string; price_cents: number; capacity: number; pricing_model: PricingModel; reference_value_cents: number | null; rounding_mode: PricingRounding }>(
+      "SELECT id, name, price_cents, capacity, pricing_model, reference_value_cents, rounding_mode FROM tiers WHERE webinar_id = $1 ORDER BY sort_order ASC", [id]),
     database.query<{ id: string; tier_id: string; seat_number: number; status: SeatStatus; hold_expires_at: string | null }>(`
       SELECT s.id, s.tier_id, s.seat_number, s.status, s.hold_expires_at
       FROM seats s JOIN tiers t ON t.id = s.tier_id
@@ -209,6 +217,9 @@ async function webinarDetailsById(id: string, includeRegistrations: boolean): Pr
     name: tier.name,
     priceCents: Number(tier.price_cents),
     capacity: Number(tier.capacity),
+    pricingModel: tier.pricing_model,
+    referenceValueCents: tier.reference_value_cents === null ? null : Number(tier.reference_value_cents),
+    roundingMode: tier.rounding_mode,
     seats: seatsResult.rows
       .filter((seat) => seat.tier_id === tier.id)
       .map((seat) => ({
@@ -227,7 +238,7 @@ async function webinarDetailsById(id: string, includeRegistrations: boolean): Pr
     tiers,
   };
   if (!includeRegistrations) {
-    const { revenueCents: _revenueCents, ...publicDetails } = base;
+    const { revenueCents: _revenueCents, visibility: _visibility, ...publicDetails } = base;
     return publicDetails;
   }
 
@@ -242,7 +253,7 @@ export async function getWebinarById(id: string): Promise<WebinarDetails | null>
 export async function getPublicWebinarBySlug(slug: string): Promise<PublicWebinarDetails | null> {
   await assertStandaloneDataset();
   const { rows } = await getDb().query<{ id: string }>(
-    "SELECT id FROM webinars WHERE slug = $1 AND status IN ('published', 'sold_out')", [slug]);
+    "SELECT id FROM webinars WHERE slug = $1 AND visibility = 'public' AND status IN ('published', 'sold_out')", [slug]);
   return rows[0] ? webinarDetailsById(rows[0].id, false) : null;
 }
 
@@ -250,6 +261,196 @@ export async function getWebinarBySlug(slug: string): Promise<WebinarDetails | n
   await assertStandaloneDataset();
   const { rows } = await getDb().query<{ id: string }>("SELECT id FROM webinars WHERE slug = $1", [slug]);
   return rows[0] ? getWebinarById(rows[0].id) : null;
+}
+
+type WebinarAccess = {
+  visibility: WebinarVisibility;
+  inviteId: string | null;
+  inviteEmail: string | null;
+};
+
+async function assertWebinarAccess(
+  client: DatabaseClient,
+  webinarId: string,
+  privateAccessToken?: string | null,
+  email?: string,
+): Promise<WebinarAccess> {
+  const now = new Date().toISOString();
+  const tokenHash = privateAccessToken ? hashPrivateAccessToken(privateAccessToken) : null;
+  const { rows } = await client.query<{
+    visibility: WebinarVisibility;
+    invite_id: string | null;
+    invite_email: string | null;
+  }>(`
+    SELECT w.visibility, pws.invite_id, wi.email AS invite_email
+    FROM webinars w
+    LEFT JOIN private_webinar_sessions pws
+      ON pws.webinar_id = w.id
+      AND pws.token_hash = $2
+      AND pws.expires_at > $3
+    LEFT JOIN webinar_invites wi
+      ON wi.id = pws.invite_id
+      AND wi.revoked_at IS NULL
+      AND wi.expires_at > $3
+    WHERE w.id = $1
+  `, [webinarId, tokenHash, now]);
+  const access = rows[0];
+  if (!access) throw new DomainError("The webinar could not be found.", 404);
+  if (access.visibility === "private" && (!access.invite_id || !access.invite_email)) {
+    throw new DomainError("A valid invitation is required for this private webinar.", 403);
+  }
+  if (email && access.invite_email && normalizeInviteEmail(email) !== normalizeInviteEmail(access.invite_email)) {
+    throw new DomainError("Use the email address that received the invitation.", 403);
+  }
+  return { visibility: access.visibility, inviteId: access.invite_id, inviteEmail: access.invite_email };
+}
+
+async function privateSessionForSlug(slug: string, privateAccessToken: string | null): Promise<{
+  webinarId: string;
+  inviteId: string;
+  email: string;
+  expiresAt: string;
+} | null> {
+  if (!privateAccessToken) return null;
+  await assertStandaloneDataset();
+  const now = new Date().toISOString();
+  const { rows } = await getDb().query<{
+    webinar_id: string;
+    invite_id: string;
+    email: string;
+    expires_at: string;
+  }>(`
+    SELECT w.id AS webinar_id, wi.id AS invite_id, wi.email, pws.expires_at
+    FROM private_webinar_sessions pws
+    JOIN webinars w ON w.id = pws.webinar_id
+    JOIN webinar_invites wi ON wi.id = pws.invite_id
+    WHERE w.slug = $1
+      AND w.visibility = 'private'
+      AND w.status IN ('published', 'sold_out')
+      AND pws.token_hash = $2
+      AND pws.expires_at > $3
+      AND wi.revoked_at IS NULL
+      AND wi.expires_at > $3
+  `, [slug, hashPrivateAccessToken(privateAccessToken), now]);
+  const session = rows[0];
+  return session ? { webinarId: session.webinar_id, inviteId: session.invite_id, email: session.email, expiresAt: session.expires_at } : null;
+}
+
+export async function getPrivateWebinarBySlug(slug: string, privateAccessToken: string | null): Promise<PublicWebinarDetails | null> {
+  const session = await privateSessionForSlug(slug, privateAccessToken);
+  return session ? webinarDetailsById(session.webinarId, false) : null;
+}
+
+export async function getPrivateWebinarRoomBySlug(slug: string, privateAccessToken: string | null): Promise<{
+  webinar: PublicWebinarDetails;
+  paid: boolean;
+} | null> {
+  const session = await privateSessionForSlug(slug, privateAccessToken);
+  if (!session) return null;
+  const webinar = await webinarDetailsById(session.webinarId, false);
+  if (!webinar) return null;
+  const { rows } = await getDb().query<{ paid: boolean | number }>(`
+    SELECT EXISTS(
+      SELECT 1 FROM registrations
+      WHERE webinar_id = $1
+        AND lower(customer_email) = lower($2)
+        AND payment_status = 'paid'
+        AND access_status = 'active'
+    ) AS paid
+  `, [session.webinarId, session.email]);
+  return { webinar, paid: Boolean(rows[0]?.paid) };
+}
+
+export async function getPrivateWebinarInvites(webinarId: string): Promise<WebinarInviteView[]> {
+  await assertStandaloneDataset();
+  const { rows } = await getDb().query<{
+    id: string;
+    email: string;
+    expires_at: string;
+    revoked_at: string | null;
+    last_verified_at: string | null;
+    redeemed_at: string | null;
+    created_at: string;
+  }>(`
+    SELECT id, email, expires_at, revoked_at, last_verified_at, redeemed_at, created_at
+    FROM webinar_invites
+    WHERE webinar_id = $1
+    ORDER BY created_at DESC, email ASC
+  `, [webinarId]);
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    lastVerifiedAt: row.last_verified_at,
+    redeemedAt: row.redeemed_at,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createWebinarInvites(webinarId: string, emails: string[], actorId: string, expiresAt?: string): Promise<Array<{
+  email: string;
+  code: string;
+  expiresAt: string;
+  webinarSlug: string;
+}>> {
+  const normalizedEmails = [...new Set(emails.map(normalizeInviteEmail).filter(Boolean))];
+  if (normalizedEmails.length === 0 || normalizedEmails.length > 500) {
+    throw new DomainError("Provide between one and five hundred email addresses.");
+  }
+  if (normalizedEmails.some((email) => email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    throw new DomainError("Every invitation must contain a valid email address.");
+  }
+
+  const requestedExpiry = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 30 * 86_400_000);
+  if (Number.isNaN(requestedExpiry.getTime()) || requestedExpiry.getTime() <= Date.now()) {
+    throw new DomainError("Invitation expiry must be a future date.");
+  }
+  const expiry = requestedExpiry.toISOString();
+  const now = new Date().toISOString();
+  return withTransaction(async (client) => {
+    const webinarResult = await client.query<{ slug: string; visibility: WebinarVisibility }>(
+      "SELECT slug, visibility FROM webinars WHERE id = $1 FOR UPDATE", [webinarId]);
+    const webinar = webinarResult.rows[0];
+    if (!webinar) throw new DomainError("The webinar could not be found.", 404);
+    if (webinar.visibility !== "private") throw new DomainError("Invitations can only be created for private webinars.");
+
+    const generated: Array<{ email: string; code: string; expiresAt: string; webinarSlug: string }> = [];
+    for (const email of normalizedEmails) {
+      const code = generateInviteCode();
+      await client.query(`
+        INSERT INTO webinar_invites (id, webinar_id, email, code_hash, expires_at, created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (webinar_id, email) DO UPDATE SET
+          code_hash = EXCLUDED.code_hash,
+          expires_at = EXCLUDED.expires_at,
+          revoked_at = NULL,
+          last_verified_at = NULL,
+          redeemed_at = NULL,
+          created_by = EXCLUDED.created_by,
+          created_at = EXCLUDED.created_at
+      `, [randomUUID(), webinarId, email, hashInviteCode(code), expiry, actorId, now]);
+      generated.push({ email, code, expiresAt: expiry, webinarSlug: webinar.slug });
+    }
+    await client.query(`
+      INSERT INTO audit_events (id, actor_id, event_type, entity_type, entity_id, metadata_json, created_at)
+      VALUES ($1, $2, 'webinar.invites_generated', 'webinar', $3, $4, $5)
+    `, [randomUUID(), actorId, webinarId, JSON.stringify({ emailCount: generated.length, synthetic: true }), now]);
+    return generated;
+  });
+}
+
+export async function revokeWebinarInvite(inviteId: string, actorId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await withTransaction(async (client) => {
+    const result = await client.query<{ webinar_id: string }>(
+      "UPDATE webinar_invites SET revoked_at = $1 WHERE id = $2 AND revoked_at IS NULL RETURNING webinar_id", [now, inviteId]);
+    if (!result.rows[0]) throw new DomainError("The invitation could not be found or is already revoked.", 404);
+    await client.query(`
+      INSERT INTO audit_events (id, actor_id, event_type, entity_type, entity_id, metadata_json, created_at)
+      VALUES ($1, $2, 'webinar.invite_revoked', 'invite', $3, $4, $5)
+    `, [randomUUID(), actorId, inviteId, JSON.stringify({ webinarId: result.rows[0].webinar_id, synthetic: true }), now]);
+  });
 }
 
 async function registrationRows(sql: string, values: unknown[] = []): Promise<RegistrationView[]> {
@@ -374,7 +575,7 @@ async function withTransaction<T>(work: (client: DatabaseClient) => Promise<T>):
   }
 }
 
-export async function createSeatHold(webinarId: string, seatIds: string[]): Promise<HoldResult> {
+export async function createSeatHold(webinarId: string, seatIds: string[], privateAccessToken?: string | null): Promise<HoldResult> {
   const uniqueSeatIds = [...new Set(seatIds.filter((seatId) => typeof seatId === "string" && seatId.length > 0))].sort();
   if (uniqueSeatIds.length === 0 || uniqueSeatIds.length > 6) {
     throw new DomainError("Choose between one and six seats.");
@@ -387,6 +588,7 @@ export async function createSeatHold(webinarId: string, seatIds: string[]): Prom
   const holdHash = tokenHash(holdToken);
 
   const seats = await withTransaction(async (client) => {
+    await assertWebinarAccess(client, webinarId, privateAccessToken);
     await client.query(`
       UPDATE seats
       SET status = 'available', hold_token_hash = NULL, hold_expires_at = NULL
@@ -443,6 +645,7 @@ export interface RegistrationInput {
   phone: string;
   consent: boolean;
   userId?: string | null;
+  privateAccessToken?: string | null;
 }
 
 export async function completeRegistration(input: RegistrationInput): Promise<{
@@ -457,6 +660,7 @@ export async function completeRegistration(input: RegistrationInput): Promise<{
   const hash = tokenHash(input.holdToken);
   const now = new Date().toISOString();
   return withTransaction(async (client) => {
+    const access = await assertWebinarAccess(client, input.webinarId, input.privateAccessToken, input.email);
     const { rows: heldSeats } = await client.query<{
       id: string;
       seat_number: number;
@@ -510,6 +714,13 @@ export async function completeRegistration(input: RegistrationInput): Promise<{
         `, [randomUUID(), registrationId, `${registrationId}:registration-confirmed:sms`, now]);
       }
       registrationIds.push(registrationId);
+    }
+
+    if (access.inviteId) {
+      await client.query(
+        "UPDATE webinar_invites SET redeemed_at = COALESCE(redeemed_at, $1) WHERE id = $2",
+        [now, access.inviteId],
+      );
     }
 
     await client.query(`
@@ -573,16 +784,56 @@ export interface CreateWebinarInput {
   priceCents: number;
   capacity: number;
   status: "draft" | "published";
+  visibility?: WebinarVisibility;
+  pricingModel?: PricingModel;
+  referenceValueCents?: number | null;
+  roundingMode?: PricingRounding;
 }
 
 function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || `webinar-${Date.now()}`;
 }
 
+export function resolveTierPricing(input: CreateWebinarInput): {
+  priceCents: number;
+  pricingModel: PricingModel;
+  referenceValueCents: number | null;
+  roundingMode: PricingRounding;
+} {
+  const pricingModel = input.pricingModel ?? "fixed_per_seat";
+  const roundingMode = input.roundingMode ?? "exact_cents";
+  if (pricingModel === "fixed_per_seat") {
+    if (!Number.isInteger(input.priceCents) || input.priceCents < 0) {
+      throw new DomainError("Enter a valid per-seat price.");
+    }
+    return { priceCents: input.priceCents, pricingModel, referenceValueCents: null, roundingMode: "exact_cents" };
+  }
+
+  const referenceValueCents = input.referenceValueCents;
+  if (typeof referenceValueCents !== "number" || !Number.isInteger(referenceValueCents) || referenceValueCents < 0) {
+    throw new DomainError("Enter a valid total item value for split pricing.");
+  }
+  if (!["exact_cents", "nearest_dollar", "round_up_dollar"].includes(roundingMode)) {
+    throw new DomainError("Choose a valid pricing rounding rule.");
+  }
+  const calculatedCents = referenceValueCents / input.capacity;
+  const priceCents = roundingMode === "round_up_dollar"
+    ? Math.ceil(calculatedCents / 100) * 100
+    : roundingMode === "nearest_dollar"
+      ? Math.round(calculatedCents / 100) * 100
+      : Math.round(calculatedCents);
+  if (!Number.isSafeInteger(priceCents) || priceCents < 0 || priceCents > 1_000_000) {
+    throw new DomainError("The calculated seat price is outside the supported range.");
+  }
+  return { priceCents, pricingModel, referenceValueCents, roundingMode };
+}
+
 export async function createWebinar(input: CreateWebinarInput, actorId: string): Promise<WebinarDetails> {
   const webinarId = `webinar-${randomUUID()}`;
   const tierId = `${webinarId}-tier-primary`;
   const now = new Date().toISOString();
+  const pricing = resolveTierPricing(input);
+  const visibility = input.visibility ?? "public";
   const webinar = await withTransaction(async (client) => {
     let slug = slugify(input.title);
     const existing = await client.query("SELECT id FROM webinars WHERE slug = $1", [slug]);
@@ -592,15 +843,15 @@ export async function createWebinar(input: CreateWebinarInput, actorId: string):
       INSERT INTO webinars
         (id, slug, title, eyebrow, description, long_description, starts_at,
          duration_minutes, timezone, status, provider, host_name, host_bio,
-         replay_label, replay_url, accent, created_at, updated_at)
+         replay_label, replay_url, accent, visibility, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9,
-        'Manual meeting', $10, $11, 'Replay planned', NULL, 'teal', $12, $12)
+        'Manual meeting', $10, $11, 'Replay planned', NULL, 'teal', $12, $13, $13)
     `, [webinarId, slug, input.title, input.eyebrow, input.description,
       new Date(input.startsAt).toISOString(), input.durationMinutes, input.timezone, input.status,
-      input.hostName, "A new host profile is ready to be filled in from the admin console.", now]);
+      input.hostName, "A new host profile is ready to be filled in from the admin console.", visibility, now]);
     await client.query(
-      "INSERT INTO tiers (id, webinar_id, name, price_cents, capacity, sort_order) VALUES ($1, $2, $3, $4, $5, 0)",
-      [tierId, webinarId, input.tierName, input.priceCents, input.capacity]);
+      "INSERT INTO tiers (id, webinar_id, name, price_cents, capacity, pricing_model, reference_value_cents, rounding_mode, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)",
+      [tierId, webinarId, input.tierName, pricing.priceCents, input.capacity, pricing.pricingModel, pricing.referenceValueCents, pricing.roundingMode]);
     await client.query(`
       INSERT INTO seats (id, tier_id, seat_number, status)
       SELECT $1 || '-seat-' || n::text, $1, n, 'available'

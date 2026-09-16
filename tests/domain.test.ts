@@ -54,10 +54,19 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       getPublicWebinars,
       getWebinarBySlug,
       getPublicWebinarBySlug,
+      getPrivateWebinarBySlug,
       getDashboardData,
       drawWinner,
       createWebinar,
+      createWebinarInvites,
     } = await import("@/lib/data");
+    const { generateInviteCode, hashInviteCode, normalizeInviteCode, normalizeInviteEmail } = await import("@/lib/private-access-core");
+
+    const inviteCode = generateInviteCode();
+    assert.match(inviteCode, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.equal(normalizeInviteCode(inviteCode), inviteCode.replace("-", ""));
+    assert.equal(normalizeInviteEmail("  Attendee@Example.TEST "), "attendee@example.test");
+    assert.notEqual(hashInviteCode(inviteCode), inviteCode);
 
     const publicWebinars = await getPublicWebinars();
     assert.equal(publicWebinars.length, 2);
@@ -127,6 +136,68 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal(managed.capacity, 3);
     assert.equal(managed.timezone, "America/Chicago");
     assert.equal(managed.tiers[0].seats.length, 3);
+
+    const { resolveTierPricing } = await import("@/lib/data");
+    const pricingInput = {
+      title: "Pricing test",
+      eyebrow: "Test",
+      description: "A pricing test webinar.",
+      startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+      timezone: "America/Chicago",
+      durationMinutes: 60,
+      hostName: "Test Host",
+      tierName: "Seat",
+      priceCents: 0,
+      capacity: 1,
+      status: "draft" as const,
+    };
+    assert.deepEqual(resolveTierPricing({ ...pricingInput, pricingModel: "split_total_value", referenceValueCents: 798, roundingMode: "round_up_dollar" }), {
+      priceCents: 800,
+      pricingModel: "split_total_value",
+      referenceValueCents: 798,
+      roundingMode: "round_up_dollar",
+    });
+    assert.deepEqual(resolveTierPricing({ ...pricingInput, pricingModel: "split_total_value", referenceValueCents: 45_000, capacity: 6, roundingMode: "exact_cents" }), {
+      priceCents: 7500,
+      pricingModel: "split_total_value",
+      referenceValueCents: 45_000,
+      roundingMode: "exact_cents",
+    });
+
+    const privateWebinar = await createWebinar({
+      ...pricingInput,
+      title: "Synthetic Private Access Test",
+      visibility: "private",
+      status: "published",
+      capacity: 2,
+      priceCents: 500,
+    }, "user_test_admin");
+    const generatedInvites = await createWebinarInvites(privateWebinar.id, [" Private.Attendee@example.test ", "second@example.test" ], "user_test_admin");
+    assert.equal(generatedInvites.length, 2);
+    assert.equal(generatedInvites[0].email, "private.attendee@example.test");
+    assert.match(generatedInvites[0].code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    const storedInvite = await getDb().query<{ email: string; code_hash: string }>(
+      "SELECT email, code_hash FROM webinar_invites WHERE webinar_id = $1 AND email = $2",
+      [privateWebinar.id, generatedInvites[0].email],
+    );
+    assert.equal(storedInvite.rows[0]?.email, generatedInvites[0].email);
+    assert.equal(storedInvite.rows[0]?.code_hash, hashInviteCode(generatedInvites[0].code));
+
+    const { verifyPrivateInvite } = await import("@/lib/private-access");
+    const verifiedInvite = await verifyPrivateInvite(privateWebinar.slug, generatedInvites[0].email, generatedInvites[0].code);
+    assert.ok(verifiedInvite);
+    assert.equal(verifiedInvite.webinarId, privateWebinar.id);
+    assert.equal(verifiedInvite.email, generatedInvites[0].email);
+    assert.equal(await verifyPrivateInvite(privateWebinar.slug, "wrong@example.test", generatedInvites[0].code), null);
+    assert.equal(await verifyPrivateInvite("not-a-private-webinar", generatedInvites[0].email, generatedInvites[0].code), null);
+
+    const privateDetails = await getPrivateWebinarBySlug(privateWebinar.slug, verifiedInvite.accessToken);
+    assert.ok(privateDetails);
+    assert.equal(await getPrivateWebinarBySlug(privateWebinar.slug, null), null);
+    await assert.rejects(
+      createWebinarInvites(published.id, ["not-private@example.test"], "user_test_admin"),
+      (error: unknown) => error instanceof DomainError && /only be created for private webinars/.test(error.message),
+    );
 
     await getDb().query("UPDATE system_metadata SET value = 'imported' WHERE key = 'dataset_origin'");
     await assert.rejects(

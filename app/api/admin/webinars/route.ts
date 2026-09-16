@@ -23,9 +23,17 @@ const createSchema = z.object({
   durationMinutes: z.number().int().min(15).max(480),
   hostName: z.string().trim().min(2).max(100),
   tierName: z.string().trim().min(2).max(80),
-  priceCents: z.number().int().min(0).max(1000000),
+  priceCents: z.number().int().min(0).max(1000000).default(0),
   capacity: z.number().int().min(1).max(500),
   status: z.enum(["draft", "published"]),
+  visibility: z.enum(["public", "private"]).default("public"),
+  pricingModel: z.enum(["fixed_per_seat", "split_total_value"]).default("fixed_per_seat"),
+  referenceValueCents: z.number().int().min(0).max(100000000).nullable().optional(),
+  roundingMode: z.enum(["exact_cents", "nearest_dollar", "round_up_dollar"]).default("exact_cents"),
+}).superRefine((value, context) => {
+  if (value.pricingModel === "split_total_value" && value.referenceValueCents === null || value.pricingModel === "split_total_value" && value.referenceValueCents === undefined) {
+    context.addIssue({ code: "custom", path: ["referenceValueCents"], message: "A total item value is required for split pricing." });
+  }
 });
 
 export async function POST(request: Request) {

@@ -1,5 +1,8 @@
 export type Role = "admin" | "attendee";
 export type WebinarStatus = "draft" | "published" | "sold_out" | "completed";
+export type WebinarVisibility = "public" | "private";
+export type PricingModel = "fixed_per_seat" | "split_total_value";
+export type PricingRounding = "exact_cents" | "nearest_dollar" | "round_up_dollar";
 export type SeatStatus = "available" | "held" | "sold";
 export type PaymentStatus = "paid" | "pending" | "refunded";
 
@@ -20,6 +23,7 @@ export interface WebinarListItem {
   durationMinutes: number;
   timezone: string;
   status: WebinarStatus;
+  visibility: WebinarVisibility;
   provider: string;
   hostName: string;
   accent: string;
@@ -30,7 +34,7 @@ export interface WebinarListItem {
   revenueCents: number;
 }
 
-export type PublicWebinarListItem = Omit<WebinarListItem, "revenueCents">;
+export type PublicWebinarListItem = Omit<WebinarListItem, "revenueCents" | "visibility">;
 
 export interface SeatView {
   id: string;
@@ -43,6 +47,9 @@ export interface TierView {
   name: string;
   priceCents: number;
   capacity: number;
+  pricingModel: PricingModel;
+  referenceValueCents: number | null;
+  roundingMode: PricingRounding;
   seats: SeatView[];
 }
 
@@ -84,7 +91,17 @@ export interface WebinarDetails extends WebinarListItem {
   latestWinner: RegistrationView | null;
 }
 
-export type PublicWebinarDetails = Omit<WebinarDetails, "revenueCents" | "registrations" | "latestWinner">;
+export type PublicWebinarDetails = Omit<WebinarDetails, "revenueCents" | "visibility" | "registrations" | "latestWinner">;
+
+export interface WebinarInviteView {
+  id: string;
+  email: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastVerifiedAt: string | null;
+  redeemedAt: string | null;
+  createdAt: string;
+}
 
 export interface DashboardData {
   stats: {
