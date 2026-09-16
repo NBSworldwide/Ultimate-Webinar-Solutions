@@ -116,8 +116,8 @@ await checkSourceBoundary();
 await checkRoute("/api/health", "application/json", (body) => {
   try {
     const health = JSON.parse(body);
-    const valid = health.status === "ok" && health.database === "sqlite" && health.syntheticData === true && health.originalDataImported === false && typeof health.datasetOrigin === "string";
-    return { passed: valid, detail: valid ? `SQLite boundary reported ${health.datasetOrigin}` : "health payload did not confirm the expected boundary" };
+    const valid = health.status === "ok" && health.database === "postgres" && health.syntheticData === true && health.originalDataImported === false && typeof health.datasetOrigin === "string";
+    return { passed: valid, detail: valid ? `PostgreSQL boundary reported ${health.datasetOrigin}` : "health payload did not confirm the expected boundary" };
   } catch {
     return { passed: false, detail: "health response was not valid JSON" };
   }

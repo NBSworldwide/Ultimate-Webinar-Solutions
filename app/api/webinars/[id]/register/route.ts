@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const webinarId = (await params).id;
     const body = registrationSchema.parse(await request.json());
     const currentUser = await getCurrentUser();
-    const result = completeRegistration({ ...body, webinarId, userId: currentUser?.id ?? null });
+    const result = await completeRegistration({ ...body, webinarId, userId: currentUser?.id ?? null });
     return NextResponse.json({ success: true, registration: { groupId: result.groupId, webinarTitle: result.webinarTitle, registrationCount: result.registrationIds.length } });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Check the registration details and try again." }, { status: 400 });

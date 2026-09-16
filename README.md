@@ -6,25 +6,25 @@ Standalone webinar operations application built from scratch. This project does 
 
 ```bash
 pnpm install
+Copy-Item .env.example .env.local
+# Edit .env.local and set DATABASE_URL to a development PostgreSQL/Neon connection.
+pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
 
 Open <http://localhost:3000>.
 
-Demo accounts (local development only):
+Seeded samples never create login accounts or default passwords. To access the local admin, set `INITIAL_ADMIN_EMAIL` and a strong `INITIAL_ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:create-admin`.
 
-- Admin: `admin@demo.webinar.local` / `demo-admin`
-- Attendee: `attendee@demo.webinar.local` / `demo-attendee`
+The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection string before running the migration or seed commands. Neon is used by the deployed Vercel app; a separate Neon branch or local PostgreSQL database is recommended for development. Migrations are explicit and safe to rerun. `pnpm db:seed` creates only synthetic webinar, ticket, seat, and registration samples; it refuses to seed over unmarked application data. No payment gateway, email provider, SMS provider, or webinar provider is contacted by the demo.
 
-The local database is created at `.data/webinar.sqlite` and is seeded automatically with synthetic records when it is empty. No payment gateway, email provider, SMS provider, or webinar provider is contacted by the demo.
-
-The seed is explicitly controlled by `DEMO_MODE` and `ALLOW_DEMO_SEED`. Keep both enabled only for local development. A production process refuses to start with demo seeding enabled, rejects an unmarked database, and disables the demo checkout path. Copy `.env.example` to `.env.local` and use a randomly generated `SESSION_SECRET` before deploying.
+`DEMO_MODE` applies only to local development. Production sample records are inserted by the explicit seed command, never on a request or cold start. Sample data never creates login accounts. Production checkout remains disabled until a real payment provider is configured. Set a unique, random `SESSION_SECRET` (at least 32 characters) and `APP_URL` in Vercel. Create the first production admin with `pnpm db:create-admin` using `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 20 characters; the command refuses to overwrite an existing admin.
 
 ## Current foundation
 
 - Next.js App Router with TypeScript and React.
-- SQLite for a zero-configuration local development database. The schema is designed so production can move to PostgreSQL without returning to WordPress metadata.
+- Managed PostgreSQL through Neon, with versioned SQL migrations and parameterized queries.
 - Atomic, server-side seat holds with a ten-minute expiry.
 - Explicit seat states: available, held, sold.
 - Registration records tied to webinar, tier, seat, and registration group.
@@ -52,16 +52,15 @@ The project keeps the useful product ideas from `v3-refactor-plan-technical.pdf`
 
 ## Production work still required
 
-The local release intentionally uses a demo checkout rather than real payment processing. Before production, add:
+The deployed release is a synthetic-data demo and intentionally does not process real payments. Before using it for live registrations, add:
 
-1. PostgreSQL migrations and a managed database.
-2. A real payment adapter with webhook verification and PCI-safe token handling.
-3. Queue workers for the delivery ledger and provider synchronization.
-4. LiveStorm/Zoom, Twilio, and email adapters with retries, redacted logs, and idempotency.
-5. Password-reset and account-recovery flows.
-6. Shared edge/Redis rate limiting, expanded CSRF/risk controls for browser mutations, and a full permission matrix.
-7. Persistent template, scheduling, and backup-webinar administration.
-8. Unit, integration, concurrency, accessibility, and Playwright end-to-end tests.
+1. A real payment adapter with webhook verification and PCI-safe token handling.
+2. Queue workers for the delivery ledger and provider synchronization.
+3. LiveStorm/Zoom, Twilio, and email adapters with retries, redacted logs, and idempotency.
+4. Password-reset and account-recovery flows.
+5. Shared edge/Redis rate limiting, expanded CSRF/risk controls for browser mutations, and a full permission matrix.
+6. Persistent template, scheduling, and backup-webinar administration.
+7. Expanded integration, concurrency, accessibility, and Playwright end-to-end tests.
 
 ## Verification
 
@@ -81,4 +80,4 @@ The Lighthouse CLI is pinned in `package.json` for repeatable local release chec
 
 The repository includes `.mcp.json` for the Next.js DevTools MCP server. Start the app with `pnpm dev`, then let an MCP-capable development client discover the local Next.js server. See [`docs/web-mcp.md`](docs/web-mcp.md) for the boundary between local runtime inspection, authoritative web research, and future audited provider integrations.
 
-The old archive is intentionally out of scope. Do not point `DATABASE_PATH` at it or copy the SQL dump into `.data`. The finished app contains only synthetic demo records created by `scripts/seed.ts`.
+The old archive is intentionally out of scope. Do not connect it to this application or import its SQL dump. The finished app contains only synthetic demo records created by `scripts/seed.ts`.

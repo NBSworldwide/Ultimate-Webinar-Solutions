@@ -9,11 +9,11 @@ const loginSchema = z.object({ email: z.string().email(), password: z.string().m
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    enforceRateLimit("login", clientKey(request), 10, 10 * 60_000);
+    await enforceRateLimit("login", clientKey(request), 10, 10 * 60_000);
     const body = loginSchema.parse(await request.json());
-    const user = authenticate(body.email, body.password);
+    const user = await authenticate(body.email, body.password);
     if (!user) return NextResponse.json({ error: "Those credentials were not recognized." }, { status: 401 });
-    const token = createSession(user.id);
+    const token = await createSession(user.id);
     const response = NextResponse.json({ redirectTo: user.role === "admin" ? "/admin" : "/account" });
     response.cookies.set({ name: SESSION_COOKIE, value: token, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 14 });
     return response;

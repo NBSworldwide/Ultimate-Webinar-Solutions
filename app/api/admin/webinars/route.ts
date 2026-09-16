@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const body = createSchema.parse(await request.json());
-    const webinar = createWebinar(body, user.id);
+    const webinar = await createWebinar(body, user.id);
     return NextResponse.json({ webinar: { id: webinar.id, slug: webinar.slug } }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Complete all required webinar fields." }, { status: 400 });

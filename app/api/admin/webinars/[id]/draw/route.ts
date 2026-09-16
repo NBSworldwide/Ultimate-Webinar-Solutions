@@ -8,7 +8,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
   try {
     assertSameOrigin(_request);
-    const winner = drawWinner((await params).id, user.id);
+    const winner = await drawWinner((await params).id, user.id);
     return NextResponse.json({ winner: { customerName: winner.customerName, seatNumber: winner.seatNumber } });
   } catch (error) {
     if (error instanceof DomainError) return NextResponse.json({ error: error.message }, { status: error.statusCode });

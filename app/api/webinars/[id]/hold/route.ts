@@ -11,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     assertSameOrigin(request);
     enforceRateLimit("hold", clientKey(request), 20, 10 * 60_000);
     const body = holdSchema.parse(await request.json());
-    const result = createSeatHold((await params).id, body.seatIds);
+    const result = await createSeatHold((await params).id, body.seatIds);
     return NextResponse.json({ hold: result });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Choose valid seats." }, { status: 400 });
