@@ -102,4 +102,7 @@ export async function assertStandaloneDataset(): Promise<void> {
   if (!["standalone", "production"].includes(metadata.dataset_origin)) {
     throw new Error("The database has an unrecognized dataset origin.");
   }
+  if (metadata.original_data_imported !== "false") {
+    throw new Error("The database is not explicitly marked as free of imported customer or product data.");
+  }
 }

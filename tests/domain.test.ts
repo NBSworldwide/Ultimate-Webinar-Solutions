@@ -127,6 +127,12 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal(managed.capacity, 3);
     assert.equal(managed.timezone, "America/Chicago");
     assert.equal(managed.tiers[0].seats.length, 3);
+
+    await getDb().query("UPDATE system_metadata SET value = 'imported' WHERE key = 'dataset_origin'");
+    await assert.rejects(
+      getPublicWebinars(),
+      (error: unknown) => error instanceof Error && /refuses to serve imported legacy data/.test(error.message),
+    );
   } finally {
     await postgres.close();
   }

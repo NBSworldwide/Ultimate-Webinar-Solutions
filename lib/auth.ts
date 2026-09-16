@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createHmac, randomBytes } from "node:crypto";
-import { getDb } from "@/lib/db";
+import { assertStandaloneDataset, getDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import type { User } from "@/lib/types";
 
@@ -20,6 +20,7 @@ function toUser(row: { id: string; email: string; name: string; role: "admin" | 
 }
 
 export async function authenticate(email: string, password: string): Promise<User | null> {
+  await assertStandaloneDataset();
   const { rows } = await getDb().query<{
     id: string;
     email: string;
@@ -33,6 +34,7 @@ export async function authenticate(email: string, password: string): Promise<Use
 }
 
 export async function createSession(userId: string): Promise<string> {
+  await assertStandaloneDataset();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000).toISOString();
   await getDb().query(
@@ -46,6 +48,7 @@ export async function getCurrentUser(): Promise<User | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
+  await assertStandaloneDataset();
   const tokenHash = hashToken(token);
   const { rows } = await getDb().query<{
     id: string;
@@ -70,5 +73,8 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function destroyCurrentSession(): Promise<void> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (token) await getDb().query("DELETE FROM sessions WHERE token_hash = $1", [hashToken(token)]);
+  if (token) {
+    await assertStandaloneDataset();
+    await getDb().query("DELETE FROM sessions WHERE token_hash = $1", [hashToken(token)]);
+  }
 }

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
-import { getDb, isDemoMode, type DatabaseClient, type DatabaseRow } from "@/lib/db";
+import { assertStandaloneDataset, getDb, isDemoMode, type DatabaseClient, type DatabaseRow } from "@/lib/db";
 import type {
   CustomerReplayAccess,
   DashboardData,
@@ -109,6 +109,7 @@ function toRegistration(row: RegistrationRow): RegistrationView {
 }
 
 async function webinarSummaryRows(publicOnly = false): Promise<WebinarRow[]> {
+  await assertStandaloneDataset();
   const where = publicOnly ? "WHERE w.status IN ('published', 'sold_out')" : "";
   const { rows } = await getDb().query<WebinarRow>(`
     SELECT
@@ -239,17 +240,20 @@ export async function getWebinarById(id: string): Promise<WebinarDetails | null>
 }
 
 export async function getPublicWebinarBySlug(slug: string): Promise<PublicWebinarDetails | null> {
+  await assertStandaloneDataset();
   const { rows } = await getDb().query<{ id: string }>(
     "SELECT id FROM webinars WHERE slug = $1 AND status IN ('published', 'sold_out')", [slug]);
   return rows[0] ? webinarDetailsById(rows[0].id, false) : null;
 }
 
 export async function getWebinarBySlug(slug: string): Promise<WebinarDetails | null> {
+  await assertStandaloneDataset();
   const { rows } = await getDb().query<{ id: string }>("SELECT id FROM webinars WHERE slug = $1", [slug]);
   return rows[0] ? getWebinarById(rows[0].id) : null;
 }
 
 async function registrationRows(sql: string, values: unknown[] = []): Promise<RegistrationView[]> {
+  await assertStandaloneDataset();
   const { rows } = await getDb().query<RegistrationRow>(sql, values);
   return rows.map(toRegistration);
 }
@@ -285,6 +289,7 @@ export function getCustomerRegistrations(userId: string): Promise<RegistrationVi
 }
 
 export async function getCustomerReplayAccess(userId: string, registrationId: string): Promise<CustomerReplayAccess | null> {
+  await assertStandaloneDataset();
   const { rows } = await getDb().query<{
     registration_id: string;
     payment_status: "paid" | "pending" | "refunded";
@@ -354,6 +359,7 @@ function tokenHash(token: string): string {
 }
 
 async function withTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
+  await assertStandaloneDataset();
   const client = await getDb().connect();
   try {
     await client.query("BEGIN");
@@ -613,6 +619,7 @@ export async function createWebinar(input: CreateWebinarInput, actorId: string):
 }
 
 export async function cleanupExpiredHolds(): Promise<number> {
+  await assertStandaloneDataset();
   const { rowCount } = await getDb().query(`
     UPDATE seats
     SET status = 'available', hold_token_hash = NULL, hold_expires_at = NULL
