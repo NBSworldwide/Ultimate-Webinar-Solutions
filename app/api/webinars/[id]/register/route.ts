@@ -16,7 +16,7 @@ const registrationSchema = z.object({
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     assertSameOrigin(request);
-    enforceRateLimit("registration", clientKey(request), 30, 10 * 60_000);
+    await enforceRateLimit("registration", clientKey(request), 30, 10 * 60_000);
     const webinarId = (await params).id;
     const body = registrationSchema.parse(await request.json());
     const currentUser = await getCurrentUser();

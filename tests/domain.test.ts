@@ -116,6 +116,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       eyebrow: "Operations test",
       description: "A synthetic webinar used to verify the database-backed create workflow.",
       startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+      timezone: "America/Chicago",
       durationMinutes: 60,
       hostName: "Test Host",
       tierName: "General admission",
@@ -124,6 +125,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       status: "draft",
     }, "user_test_admin");
     assert.equal(managed.capacity, 3);
+    assert.equal(managed.timezone, "America/Chicago");
     assert.equal(managed.tiers[0].seats.length, 3);
   } finally {
     await postgres.close();

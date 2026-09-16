@@ -9,7 +9,7 @@ const holdSchema = z.object({ seatIds: z.array(z.string().min(1).max(120)).min(1
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     assertSameOrigin(request);
-    enforceRateLimit("hold", clientKey(request), 20, 10 * 60_000);
+    await enforceRateLimit("hold", clientKey(request), 20, 10 * 60_000);
     const body = holdSchema.parse(await request.json());
     const result = await createSeatHold((await params).id, body.seatIds);
     return NextResponse.json({ hold: result });

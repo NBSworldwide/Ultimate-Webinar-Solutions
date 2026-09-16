@@ -560,6 +560,7 @@ export interface CreateWebinarInput {
   eyebrow: string;
   description: string;
   startsAt: string;
+  timezone: string;
   durationMinutes: number;
   hostName: string;
   tierName: string;
@@ -586,10 +587,10 @@ export async function createWebinar(input: CreateWebinarInput, actorId: string):
         (id, slug, title, eyebrow, description, long_description, starts_at,
          duration_minutes, timezone, status, provider, host_name, host_bio,
          replay_label, replay_url, accent, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $5, $6, $7, 'America/Chicago', $8,
-        'Manual meeting', $9, $10, 'Replay planned', NULL, 'teal', $11, $11)
+      VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9,
+        'Manual meeting', $10, $11, 'Replay planned', NULL, 'teal', $12, $12)
     `, [webinarId, slug, input.title, input.eyebrow, input.description,
-      new Date(input.startsAt).toISOString(), input.durationMinutes, input.status,
+      new Date(input.startsAt).toISOString(), input.durationMinutes, input.timezone, input.status,
       input.hostName, "A new host profile is ready to be filled in from the admin console.", now]);
     await client.query(
       "INSERT INTO tiers (id, webinar_id, name, price_cents, capacity, sort_order) VALUES ($1, $2, $3, $4, $5, 0)",
