@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const body = createSchema.parse(await request.json());
     const webinar = await createWebinar(body, user.id);
+    revalidatePath("/webinars");
     return NextResponse.json({ webinar: { id: webinar.id, slug: webinar.slug } }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Complete all required webinar fields." }, { status: 400 });

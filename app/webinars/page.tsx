@@ -6,7 +6,7 @@ import { WebinarCard } from "@/components/webinar-card";
 import { getPublicWebinars } from "@/lib/data";
 import { buildWebinarIndexGraph } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Live sessions",
