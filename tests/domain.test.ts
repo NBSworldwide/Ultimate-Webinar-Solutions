@@ -18,6 +18,7 @@ test("role capabilities keep administrator, manager, and customer boundaries dis
 
   assert.equal(hasCapability(admin, "settings.manage"), true);
   assert.equal(hasCapability(admin, "team.manage"), true);
+  assert.equal(hasCapability(admin, "team.approve"), true);
   assert.equal(hasCapability(manager, "content.manage"), true);
   assert.equal(hasCapability(manager, "webinars.manage"), true);
   assert.equal(hasCapability(manager, "catalog.manage"), true);
@@ -26,6 +27,9 @@ test("role capabilities keep administrator, manager, and customer boundaries dis
   assert.equal(hasCapability(manager, "appearance.manage"), true);
   assert.equal(hasCapability(manager, "settings.manage"), false);
   assert.equal(hasCapability(manager, "team.manage"), false);
+  assert.equal(hasCapability(manager, "team.view"), true);
+  assert.equal(hasCapability(manager, "team.promote"), true);
+  assert.equal(hasCapability(manager, "team.approve"), false);
   assert.equal(hasCapability(customer, "admin.access"), false);
   assert.equal(hasCapability(customer, "orders.manage"), false);
 });
@@ -67,6 +71,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.deepEqual(await seedSyntheticSamples(), { webinars: 3, registrations: 5, alreadySeeded: true });
 
     const { seedDemoUsers } = await import("@/lib/demo-users");
+    const { getEmailOutbox } = await import("@/lib/email");
     const demoUsers = await seedDemoUsers({
       admin: "synthetic-demo-admin-password-2026",
       manager: "synthetic-demo-manager-password-2026",
@@ -88,29 +93,46 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal(demoUsersAgain.reset, 3);
     const { authenticate } = await import("@/lib/auth");
     assert.equal((await authenticate("admin.demo@webinar-studio.test", "synthetic-demo-admin-password-2026"))?.role, "admin");
+    assert.equal((await authenticate("demo-admin", "synthetic-demo-admin-password-2026"))?.email, "admin.demo@webinar-studio.test");
     assert.equal((await authenticate("manager.demo@webinar-studio.test", "synthetic-demo-manager-password-2026"))?.role, "manager");
     assert.equal((await authenticate("customer.demo@webinar-studio.test", "synthetic-demo-customer-password-2026"))?.role, "attendee");
     assert.equal(await authenticate("admin.demo@webinar-studio.test", "wrong-password"), null);
 
     await getDb().query(
-      "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, 'admin', $4, NOW()::text)",
-      ["user_test_admin", "admin@example.test", "Test Admin", "test-only-hash"],
+      "INSERT INTO users (id, email, username, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, 'admin', $5, NOW()::text)",
+      ["user_test_admin", "admin@example.test", "test-admin", "Test Admin", "test-only-hash"],
     );
     await getDb().query(
-      "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, 'attendee', $4, NOW()::text)",
-      ["user_test_attendee", "attendee@example.test", "Test Attendee", "test-only-hash"],
+      "INSERT INTO users (id, email, username, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, 'attendee', $5, NOW()::text)",
+      ["user_test_attendee", "attendee@example.test", "test-attendee", "Test Attendee", "test-only-hash"],
     );
     const { createAttendeeAccount } = await import("@/lib/auth");
-    const testCustomer = await createAttendeeAccount({ name: "Synthetic Checkout Customer", email: "checkout.customer@example.test", password: "synthetic-test-password" });
-    const privateCustomer = await createAttendeeAccount({ name: "Synthetic Private Customer", email: "free.private@example.test", password: "synthetic-private-password" });
+    const testCustomer = await createAttendeeAccount({ name: "Synthetic Checkout Customer", username: "checkout-customer", email: "checkout.customer@example.test", password: "synthetic-test-password" });
+    const privateCustomer = await createAttendeeAccount({ name: "Synthetic Private Customer", username: "private-customer", email: "free.private@example.test", password: "synthetic-private-password" });
     assert.equal(testCustomer.role, "attendee");
-    const { createManagerAccount, getTeamUsers, updateTeamUserRole, TeamAccountError } = await import("@/lib/team");
-    const managerUser = await createManagerAccount({ name: "Synthetic Manager", email: "manager@example.test", password: "synthetic-manager-password" }, "user_test_admin");
+    const { createManagerAccount, getAdministratorOfRecord, getTeamRoleChangeRequests, requestManagerPromotion, reviewManagerPromotion, setAdministratorOfRecord, getTeamUsers, updateTeamUserRole, TeamAccountError } = await import("@/lib/team");
+    const managerUser = await createManagerAccount({ name: "Synthetic Manager", username: "synthetic-manager", email: "manager@example.test", password: "synthetic-manager-password" }, "user_test_admin");
     assert.equal(managerUser.role, "manager");
     assert.equal((await getTeamUsers()).some((user) => user.id === managerUser.id && user.role === "manager"), true);
+    await setAdministratorOfRecord("user_test_admin", "user_test_admin");
+    assert.equal((await getAdministratorOfRecord()).id, "user_test_admin");
+    const pendingPromotion = await requestManagerPromotion("user_test_attendee", managerUser.id);
+    assert.equal(pendingPromotion.status, "pending");
+    assert.equal((await getTeamUsers()).find((user) => user.id === "user_test_attendee")?.role, "attendee");
+    assert.equal((await getTeamRoleChangeRequests("pending")).some((request) => request.id === pendingPromotion.id), true);
+    assert.equal((await getEmailOutbox()).some((item) => item.entityId === pendingPromotion.id && item.recipientEmail === "admin@example.test" && item.triggerKey === "team.role_promotion_requested"), true);
+    await assert.rejects(reviewManagerPromotion(pendingPromotion.id, "approve", managerUser.id), (error: unknown) => error instanceof TeamAccountError && /administrator/.test(error.message));
+    const approvedPromotion = await reviewManagerPromotion(pendingPromotion.id, "approve", "user_test_admin", "Approved for operations coverage.");
+    assert.equal(approvedPromotion.status, "approved");
+    assert.equal((await getTeamUsers()).find((user) => user.id === "user_test_attendee")?.role, "manager");
+    const decisionNotifications = await getEmailOutbox();
+    assert.equal(decisionNotifications.filter((item) => item.entityId === pendingPromotion.id && item.triggerKey === "team.role_promotion_reviewed").length, 3);
+    const deniedPromotion = await requestManagerPromotion(privateCustomer.id, managerUser.id);
+    await reviewManagerPromotion(deniedPromotion.id, "deny", "user_test_admin", "Keep this account as a customer for now.");
+    assert.equal((await getTeamUsers()).find((user) => user.id === privateCustomer.id)?.role, "attendee");
     await updateTeamUserRole(managerUser.id, "attendee", "user_test_admin");
     assert.equal((await getTeamUsers()).find((user) => user.id === managerUser.id)?.role, "attendee");
-    await updateTeamUserRole(managerUser.id, "manager", "user_test_admin");
+    await assert.rejects(updateTeamUserRole(privateCustomer.id, "manager", "user_test_admin"), (error: unknown) => error instanceof TeamAccountError && /approval/.test(error.message));
     await assert.rejects(updateTeamUserRole("user_test_admin", "manager", "user_test_admin"), (error: unknown) => error instanceof TeamAccountError && /own role/.test(error.message));
     const { getSiteSettings, updateSiteSettings } = await import("@/lib/site-settings");
     const defaultSiteSettings = await getSiteSettings();
@@ -434,8 +456,8 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
 
     const { getCrmContact, updateCrmContact } = await import("@/lib/crm");
     const { getSmsOutbox, getSmsTemplates, normalizeSmsPhone, processDueSms, renderSmsTemplate } = await import("@/lib/sms");
-    const { getEmailOutbox, getEmailSequences, getEmailTemplateRevisions, getEmailTemplates, renderEmailTemplate, updateEmailSequence, updateEmailTemplate } = await import("@/lib/email");
-    assert.equal((await getEmailTemplates()).length, 8);
+    const { getEmailSequences, getEmailTemplateRevisions, getEmailTemplates, renderEmailTemplate, updateEmailSequence, updateEmailTemplate } = await import("@/lib/email");
+    assert.equal((await getEmailTemplates()).length, 11);
     assert.equal((await getEmailSequences()).length, 2);
     const freeContact = await getCrmContact("crm-contact-667265652e7075626c6963406578616d706c652e74657374");
     assert.ok(freeContact);

@@ -3,6 +3,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { assertStandaloneDataset, getDb } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import type { Role, User } from "@/lib/types";
+import { validateUsername } from "@/lib/username";
 
 export { hasCapability, isStaff, roleLabel } from "@/lib/authorization";
 export type { Capability } from "@/lib/authorization";
@@ -33,41 +34,43 @@ function hashToken(value: string): string {
   return createHmac("sha256", secret ?? "local-development-session-secret").update(value).digest("hex");
 }
 
-function toUser(row: { id: string; email: string; name: string; role: Role }): User {
-  return { id: row.id, email: row.email, name: row.name, role: row.role };
+function toUser(row: { id: string; email: string; username: string; name: string; role: Role }): User {
+  return { id: row.id, email: row.email, username: row.username, name: row.name, role: row.role };
 }
 
-export async function createAttendeeAccount(input: { name: string; email: string; password: string }): Promise<User> {
+export async function createAttendeeAccount(input: { name: string; username: string; email: string; password: string }): Promise<User> {
   await assertStandaloneDataset();
   const user = {
     id: randomUUID(),
     email: input.email.trim().toLowerCase(),
+    username: validateUsername(input.username),
     name: input.name.trim(),
     role: "attendee" as const,
   };
   try {
     await getDb().query(
-      "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-      [user.id, user.email, user.name, user.role, hashPassword(input.password), new Date().toISOString()],
+      "INSERT INTO users (id, email, username, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [user.id, user.email, user.username, user.name, user.role, hashPassword(input.password), new Date().toISOString()],
     );
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
-      throw new AccountCreationError();
+      throw new AccountCreationError("An account with that email or username already exists.");
     }
     throw error;
   }
   return user;
 }
 
-export async function authenticate(email: string, password: string): Promise<User | null> {
+export async function authenticate(identifier: string, password: string): Promise<User | null> {
   await assertStandaloneDataset();
   const { rows } = await getDb().query<{
     id: string;
     email: string;
+    username: string;
     name: string;
     role: Role;
     password_hash: string;
-  }>("SELECT id, email, name, role, password_hash FROM users WHERE lower(email) = lower($1)", [email]);
+  }>("SELECT id, email, username, name, role, password_hash FROM users WHERE lower(email) = lower($1) OR lower(username) = lower($1)", [identifier.trim()]);
   const row = rows[0];
   if (!row || !verifyPassword(password, row.password_hash)) return null;
   return toUser(row);
@@ -93,11 +96,12 @@ export async function getCurrentUser(): Promise<User | null> {
   const { rows } = await getDb().query<{
     id: string;
     email: string;
+    username: string;
     name: string;
     role: Role;
     expires_at: string;
   }>(`
-    SELECT u.id, u.email, u.name, u.role, s.expires_at
+    SELECT u.id, u.email, u.username, u.name, u.role, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = $1
   `, [tokenHash]);

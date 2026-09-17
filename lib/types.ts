@@ -33,8 +33,29 @@ export type CrmActivityType = "registration" | "order" | "email" | "note" | "sys
 export interface User {
   id: string;
   email: string;
+  username: string;
   name: string;
   role: Role;
+}
+
+export type TeamRoleChangeRequestStatus = "pending" | "approved" | "denied" | "cancelled";
+
+export interface TeamRoleChangeRequestView {
+  id: string;
+  targetUserId: string;
+  targetName: string;
+  targetEmail: string;
+  targetUsername: string;
+  requestedRole: "manager";
+  requestedById: string;
+  requestedByName: string;
+  requestedByEmail: string;
+  status: TeamRoleChangeRequestStatus;
+  reviewedById: string | null;
+  reviewedByName: string | null;
+  reviewNote: string;
+  createdAt: string;
+  reviewedAt: string | null;
 }
 
 export interface SiteSettings {

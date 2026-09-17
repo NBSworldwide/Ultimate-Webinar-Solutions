@@ -70,7 +70,7 @@ export function AdminShell({ user, settings, children }: { user: User; settings:
           })}</div>;
           })}
           <p className="nav-label nav-label-spaced">System</p>
-          {hasCapability(user, "team.manage") ? <Link href="/admin/team" className={`nav-item ${pathname.startsWith("/admin/team") ? "nav-item-active" : ""}`}><UsersRound size={18} /><span>Team & access</span></Link> : null}
+          {hasCapability(user, "team.view") ? <Link href="/admin/team" className={`nav-item ${pathname.startsWith("/admin/team") ? "nav-item-active" : ""}`}><UsersRound size={18} /><span>Team & access</span></Link> : null}
           {hasCapability(user, "appearance.manage") ? <Link href="/admin/navigation" className={`nav-item ${pathname.startsWith("/admin/navigation") ? "nav-item-active" : ""}`}><Menu size={18} /><span>Navigation</span></Link> : null}
           {hasCapability(user, "appearance.manage") ? <Link href="/admin/settings" className={`nav-item ${pathname.startsWith("/admin/settings") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Appearance & settings</span></Link> : null}
           <Link href="/admin/help" className={`nav-item ${pathname.startsWith("/admin/help") ? "nav-item-active" : ""}`}><CircleHelp size={18} /><span>Help center</span></Link>

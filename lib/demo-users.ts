@@ -9,16 +9,17 @@ import type { Role } from "@/lib/types";
  * normal public sign-up flow.
  */
 export const DEMO_USER_DEFINITIONS = [
-  { key: "admin", id: "demo-user-admin", email: "admin.demo@webinar-studio.test", name: "Demo Administrator", role: "admin", passwordEnv: "DEMO_ADMIN_PASSWORD" },
-  { key: "manager", id: "demo-user-manager", email: "manager.demo@webinar-studio.test", name: "Demo Manager", role: "manager", passwordEnv: "DEMO_MANAGER_PASSWORD" },
-  { key: "customer", id: "demo-user-customer", email: "customer.demo@webinar-studio.test", name: "Demo Customer", role: "attendee", passwordEnv: "DEMO_CUSTOMER_PASSWORD" },
-] as const satisfies ReadonlyArray<{ key: string; id: string; email: string; name: string; role: Role; passwordEnv: string }>;
+  { key: "admin", id: "demo-user-admin", email: "admin.demo@webinar-studio.test", username: "demo-admin", name: "Demo Administrator", role: "admin", passwordEnv: "DEMO_ADMIN_PASSWORD" },
+  { key: "manager", id: "demo-user-manager", email: "manager.demo@webinar-studio.test", username: "demo-manager", name: "Demo Manager", role: "manager", passwordEnv: "DEMO_MANAGER_PASSWORD" },
+  { key: "customer", id: "demo-user-customer", email: "customer.demo@webinar-studio.test", username: "demo-customer", name: "Demo Customer", role: "attendee", passwordEnv: "DEMO_CUSTOMER_PASSWORD" },
+] as const satisfies ReadonlyArray<{ key: string; id: string; email: string; username: string; name: string; role: Role; passwordEnv: string }>;
 
 export type DemoUserKey = (typeof DEMO_USER_DEFINITIONS)[number]["key"];
 export type DemoUserPasswords = Partial<Record<DemoUserKey, string>>;
 
 export interface DemoUserSeedRecord {
   email: string;
+  username: string;
   name: string;
   role: Role;
   action: "created" | "reset";
@@ -90,12 +91,12 @@ export async function seedDemoUsers(passwords?: DemoUserPasswords): Promise<Demo
 
       if (!row) {
         await client.query(
-          `INSERT INTO users (id, email, name, role, password_hash, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [definition.id, definition.email, definition.name, definition.role, hashPassword(password), now],
+          `INSERT INTO users (id, email, username, name, role, password_hash, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [definition.id, definition.email, definition.username, definition.name, definition.role, hashPassword(password), now],
         );
         await recordAudit(client, "team.demo_user_created", definition.id, definition.role, now);
-        users.push({ email: definition.email, name: definition.name, role: definition.role, action: "created" });
+        users.push({ email: definition.email, username: definition.username, name: definition.name, role: definition.role, action: "created" });
         created += 1;
         continue;
       }
@@ -107,12 +108,12 @@ export async function seedDemoUsers(passwords?: DemoUserPasswords): Promise<Demo
 
       await client.query(
         `UPDATE users
-         SET name = $2, role = $3, password_hash = $4
+         SET username = $2, name = $3, role = $4, password_hash = $5
          WHERE id = $1`,
-        [definition.id, definition.name, definition.role, hashPassword(password)],
+        [definition.id, definition.username, definition.name, definition.role, hashPassword(password)],
       );
       await recordAudit(client, "team.demo_user_reset", definition.id, definition.role, now);
-      users.push({ email: definition.email, name: definition.name, role: definition.role, action: "reset" });
+      users.push({ email: definition.email, username: definition.username, name: definition.name, role: definition.role, action: "reset" });
       reset += 1;
     }
 

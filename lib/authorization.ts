@@ -19,7 +19,10 @@ export type Capability =
   | "messaging.manage"
   | "inventory.manage"
   | "settings.manage"
-  | "team.manage";
+  | "team.manage"
+  | "team.view"
+  | "team.promote"
+  | "team.approve";
 
 const allCapabilities: readonly Capability[] = [
   "admin.access",
@@ -36,6 +39,9 @@ const allCapabilities: readonly Capability[] = [
   "inventory.manage",
   "settings.manage",
   "team.manage",
+  "team.view",
+  "team.promote",
+  "team.approve",
 ];
 
 const capabilitiesByRole: Record<Role, readonly Capability[]> = {
@@ -50,6 +56,8 @@ const capabilitiesByRole: Record<Role, readonly Capability[]> = {
     "analytics.view",
     "appearance.manage",
     "email.manage",
+    "team.view",
+    "team.promote",
   ],
   attendee: [],
 };

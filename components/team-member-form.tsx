@@ -7,6 +7,7 @@ import { useState } from "react";
 export function TeamMemberForm() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -20,11 +21,12 @@ export function TeamMemberForm() {
       const response = await fetch("/api/admin/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, username, email, password }),
       });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "The manager account could not be created.");
       setName("");
+      setUsername("");
       setEmail("");
       setPassword("");
       setMessage("Manager account created.");
@@ -42,6 +44,7 @@ export function TeamMemberForm() {
       <p className="field-help">Managers can manage sessions, products, orders, registrations, page content, automated customer emails, and visual template appearance. They cannot change company settings, integrations, team access, or provider credentials.</p>
       <div className="form-grid">
         <div className="field"><label htmlFor="team-member-name">Full name</label><input id="team-member-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required /></div>
+        <div className="field"><label htmlFor="team-member-username">Username</label><input id="team-member-username" autoComplete="username" minLength={3} maxLength={32} pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}[a-zA-Z0-9]" value={username} onChange={(event) => setUsername(event.target.value)} required /></div>
         <div className="field"><label htmlFor="team-member-email">Email</label><input id="team-member-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div>
         <div className="field"><label htmlFor="team-member-password">Temporary password</label><input id="team-member-password" type="password" autoComplete="new-password" minLength={20} value={password} onChange={(event) => setPassword(event.target.value)} required /><small className="field-help">Use at least 20 characters and share it through a secure channel.</small></div>
       </div>

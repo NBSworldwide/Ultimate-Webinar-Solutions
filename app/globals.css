@@ -331,6 +331,14 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-
 .field label { display: block; margin-bottom: 5px; color: var(--ink-soft); font: 500 9px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
 .field input, .field select, .field textarea { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); background: #fff; font-size: 12px; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(15,119,110,.1); }
+.password-field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.password-field-label-row label { margin-bottom: 0; }
+.password-field-state { color: var(--ink-faint); font: 500 9px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
+.password-field { position: relative; }
+.password-field input { padding-right: 45px; }
+.password-visibility-toggle { position: absolute; top: 50%; right: 4px; display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--ink-faint); background: transparent; transform: translateY(-50%); }
+.password-visibility-toggle:hover { color: var(--teal-dark); background: var(--surface-tinted); }
+.password-visibility-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
 .check-field { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
 .check-field input { margin-top: 2px; accent-color: var(--teal); }
 .form-error, .form-success { margin: 10px 0 0; padding: 9px 10px; border-radius: 8px; font-size: 11px; line-height: 1.4; }
