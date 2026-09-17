@@ -84,11 +84,11 @@ pnpm lighthouse http://localhost:3000/webinars --output=html --output-path=./lig
 
 `pnpm readiness:agentic` expects the local app at `http://localhost:3000`. Set `READINESS_REQUIRE_GIT=true` in the release gate so it also requires a clean `main` branch with a commit. The scan is intentionally read-only and does not send customer, product, or registration data to an AI service.
 
-The scheduled webinar lifecycle worker accepts `CRON_SECRET` (or the optional `WEBINAR_WORKER_SECRET`) and runs alongside the SMS worker. It completes sessions whose scheduled duration has elapsed and performs an automatic giveaway draw when an eligible registration exists.
+The protected webinar lifecycle worker accepts `CRON_SECRET` (or the optional `WEBINAR_WORKER_SECRET`) and runs alongside the SMS worker. It completes sessions whose scheduled duration has elapsed and performs an automatic giveaway draw when an eligible registration exists. The worker endpoints are intentionally not declared as frequent Vercel Cron jobs in this release because the connected Hobby plan permits only daily schedules. For live operation, call the protected endpoints from an external scheduler, a provider end-of-stream webhook, or a Vercel Pro project with the desired schedule.
 
 ### SMS setup
 
-SMS is disabled unless `SMS_ENABLED=true`. Local development uses `SMS_PROVIDER=mock`, which marks due messages as sent without contacting a carrier. For production, set `SMS_PROVIDER=twilio`, add the Twilio account, auth token, and Messaging Service SID as server-side Vercel environment variables, and set `SMS_WORKER_SECRET` or `CRON_SECRET`. The `/api/internal/sms/process` route is scheduled every five minutes by `vercel.json`; it accepts only the configured worker secret. Complete sender registration and confirm the SMS consent language before enabling real delivery.
+SMS is disabled unless `SMS_ENABLED=true`. Local development uses `SMS_PROVIDER=mock`, which marks due messages as sent without contacting a carrier. For production, set `SMS_PROVIDER=twilio`, add the Twilio account, auth token, and Messaging Service SID as server-side Vercel environment variables, and set `SMS_WORKER_SECRET` or `CRON_SECRET`. The `/api/internal/sms/process` route accepts only the configured worker secret; schedule it with the same worker mechanism used for webinar lifecycle processing. Complete sender registration and confirm the SMS consent language before enabling real delivery.
 
 The Lighthouse CLI is pinned in `package.json` for repeatable local release checks. For a complete report, use both `--output=html` and `--output=json`; reports should be written to a local artifact directory and kept out of Git.
 

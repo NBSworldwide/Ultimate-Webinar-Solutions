@@ -55,7 +55,7 @@ The standalone application starts with synthetic records only. The cPanel backup
 11. Contacts are keyed by normalized email so registrations and product orders share one CRM record without importing legacy customer data.
 12. Email content is stored separately from delivery; provider adapters consume outbox jobs and never receive credentials from browser code.
 13. SMS consent is separate from email consent; reminder and winner messages are queued only for an active, consented phone number.
-14. SMS provider calls happen through the protected scheduled outbox worker; the drawing transaction never waits on a carrier API.
+14. SMS provider calls happen through the protected outbox worker endpoint; the drawing transaction never waits on a carrier API. Scheduling is supplied by an external worker, a provider callback, or a Vercel plan that supports the required cadence.
 15. Company identity is stored separately from customer and product records, so changing the site profile does not rewrite historical order or registration snapshots.
 16. A session prize snapshots its catalog name, SKU, and value at setup time, so later product edits do not rewrite the historical giveaway.
 17. A completed giveaway records one winner and one non-winner outcome for every eligible registration, with the prize and fulfillment context copied to the registration result fields.
