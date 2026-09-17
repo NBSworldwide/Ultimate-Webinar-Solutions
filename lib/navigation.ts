@@ -284,7 +284,8 @@ export async function getNavigationCandidates(): Promise<NavigationCandidate[]> 
   ]);
   const system: NavigationCandidate[] = [
     ["sessions", "Sessions", "/webinars"], ["shop", "Shop", "/products"], ["cart", "Cart", "/cart"], ["account", "My account", "/account"],
-    ["locations", "Service locations", "/locations"], ["refund-policy", "Refund policy", "/refund-policy"], ["return-policy", "Return policy", "/return-policy"],
+    ["locations", "Service locations", "/locations"], ["privacy-policy", "Privacy Policy", "/privacy-policy"], ["terms-and-conditions", "Terms & Conditions", "/terms-and-conditions"],
+    ["refund-policy", "Refund policy", "/refund-policy"], ["return-policy", "Return policy", "/return-policy"],
     ["shipping-policy", "Shipping policy", "/shipping-policy"], ["sign-in", "Sign in", "/login"],
   ].map(([id, label, href]) => ({ key: `system:${id}`, label, href, itemType: "system", entityId: id, group: "System links" }));
   return [

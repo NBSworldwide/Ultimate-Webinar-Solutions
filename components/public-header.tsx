@@ -5,7 +5,7 @@ import { getSiteSettings } from "@/lib/site-settings";
 import { PublicNavigation } from "@/components/public-navigation";
 
 const fallbackHeaderItems: NavigationMenuItemView[] = [
-  ["Sessions", "/webinars"], ["Shop", "/products"], ["Cart", "/cart"], ["My account", "/account"], ["Service locations", "/locations"], ["Sign in", "/login"],
+  ["Sessions", "/webinars"], ["Shop", "/products"], ["Cart", "/cart"], ["My account", "/account"], ["Service locations", "/locations"], ["Privacy Policy", "/privacy-policy"], ["Terms & Conditions", "/terms-and-conditions"], ["Sign in", "/login"],
 ].map(([label, href], index) => ({ id: `fallback-header-${index}`, parentId: null, label, href, itemType: "system", entityId: href, openInNewTab: false, isVisible: true, sortOrder: index, autoAdded: false }));
 
 export async function PublicHeader() {

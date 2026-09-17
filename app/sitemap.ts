@@ -13,5 +13,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const productEntries = products.map((product) => ({ url: `${baseUrl}/products/${product.slug}`, lastModified: new Date(), changeFrequency: "monthly" as const, priority: 0.7 }));
   const locationEntries = serviceLocations.map((location) => ({ url: `${baseUrl}/locations/${location.slug}`, lastModified: new Date(), changeFrequency: "monthly" as const, priority: 0.6 }));
   const pageEntries = pages.map((page) => ({ url: `${baseUrl}/pages/${page.slug}`, lastModified: new Date(page.updatedAt), changeFrequency: "monthly" as const, priority: 0.6 }));
-  return [{ url: `${baseUrl}/webinars`, lastModified: new Date(), changeFrequency: "daily", priority: 1 }, { url: `${baseUrl}/products`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 }, { url: `${baseUrl}/locations`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.7 }, ...webinarEntries, ...productEntries, ...locationEntries, ...pageEntries];
+  return [
+    { url: `${baseUrl}/webinars`, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
+    { url: `${baseUrl}/products`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
+    { url: `${baseUrl}/locations`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.7 },
+    { url: `${baseUrl}/privacy-policy`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.4 },
+    { url: `${baseUrl}/terms-and-conditions`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.4 },
+    ...webinarEntries, ...productEntries, ...locationEntries, ...pageEntries,
+  ];
 }
