@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import { StorePolicyPage } from "@/components/store-policy-page";
+export const metadata: Metadata = { title: "Return policy" };
+export default function ReturnPolicyPage() { return <StorePolicyPage eyebrow="Customer care" title="Return policy." intro="A dedicated place for product return instructions and exceptions." sections={[{ heading: "Before shipping", body: "Contact support before returning a physical product so the order and fulfillment record can be reviewed and the correct return instructions can be provided." }, { heading: "Condition and timing", body: "The site owner will configure the final eligibility window, product condition rules, and any non-returnable items before enabling live commerce." }, { heading: "Session purchases", body: "Webinar registration changes and replay access are governed by the session terms shown at registration." }]} />; }

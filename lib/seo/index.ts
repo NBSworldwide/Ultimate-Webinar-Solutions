@@ -1,5 +1,8 @@
-import type { PublicWebinarDetails, PublicWebinarListItem } from "@/lib/types";
+import type { ProductListItem, PublicWebinarDetails, PublicWebinarListItem } from "@/lib/types";
+import type { SiteSettings } from "@/lib/types";
+import type { ContentPage } from "@/lib/types";
 import type { ServiceLocation } from "@/content/locations";
+import { absoluteSiteAssetUrl, DEFAULT_SITE_SETTINGS, siteAddressLines, siteContactEmail } from "@/lib/site-settings";
 
 export type JsonLdObject = Record<string, unknown>;
 
@@ -22,22 +25,31 @@ function websiteId(baseUrl: string): string {
   return `${baseUrl}/#website`;
 }
 
-function organizationEntity(baseUrl: string): JsonLdObject {
+function organizationEntity(baseUrl: string, settings: SiteSettings): JsonLdObject {
+  const addressLines = siteAddressLines(settings);
+  const sameAs = [settings.linkedinUrl, settings.facebookUrl, settings.instagramUrl].filter(Boolean);
   return {
     "@type": "Organization",
     "@id": organizationId(baseUrl),
-    name: "Webinar Studio",
+    name: settings.displayName,
     url: baseUrl,
-    description: "A standalone workspace for planning, publishing, and operating live webinar sessions.",
+    ...(settings.legalName ? { legalName: settings.legalName } : {}),
+    description: settings.description || settings.tagline,
+    ...(absoluteSiteAssetUrl(settings.logoUrl, baseUrl) ? { logo: absoluteSiteAssetUrl(settings.logoUrl, baseUrl) } : {}),
+    ...(siteContactEmail(settings) ? { email: siteContactEmail(settings) } : {}),
+    ...(settings.phone ? { telephone: settings.phone } : {}),
+    ...(addressLines.length >= 3 ? { address: { "@type": "PostalAddress", streetAddress: [settings.addressLine1, settings.addressLine2].filter(Boolean).join(", "), addressLocality: settings.city, addressRegion: settings.region, postalCode: settings.postalCode, addressCountry: settings.country } } : {}),
+    ...(sameAs.length > 0 ? { sameAs } : {}),
   };
 }
 
-function websiteEntity(baseUrl: string): JsonLdObject {
+function websiteEntity(baseUrl: string, settings: SiteSettings): JsonLdObject {
   return {
     "@type": "WebSite",
     "@id": websiteId(baseUrl),
     url: baseUrl,
-    name: "Webinar Studio",
+    name: settings.displayName,
+    description: settings.tagline || settings.description,
     publisher: { "@id": organizationId(baseUrl) },
   };
 }
@@ -89,19 +101,19 @@ function eventSummary(webinar: PublicWebinarListItem, baseUrl: string): JsonLdOb
   };
 }
 
-export function buildWebinarIndexGraph(webinars: PublicWebinarListItem[], baseUrl = siteUrl()): JsonLdObject {
+export function buildWebinarIndexGraph(webinars: PublicWebinarListItem[], settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
   const url = `${baseUrl}/webinars`;
   return {
     "@context": "https://schema.org",
     "@graph": [
-      organizationEntity(baseUrl),
-      websiteEntity(baseUrl),
-      webPageEntity(baseUrl, url, "Live sessions", "Browse upcoming live sessions from Webinar Studio.", { "@type": "CollectionPage", "@id": `${url}#collection` }),
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
+      webPageEntity(baseUrl, url, "Live sessions", `Browse upcoming live sessions from ${settings.displayName}.`, { "@type": "CollectionPage", "@id": `${url}#collection` }),
       breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Live sessions", item: url }]),
       {
         "@type": "ItemList",
         "@id": `${url}#events`,
-        name: "Upcoming Webinar Studio sessions",
+        name: `Upcoming ${settings.displayName} sessions`,
         numberOfItems: webinars.length,
         itemListElement: webinars.map((webinar, index) => ({ "@type": "ListItem", position: index + 1, item: eventSummary(webinar, baseUrl) })),
       },
@@ -109,7 +121,7 @@ export function buildWebinarIndexGraph(webinars: PublicWebinarListItem[], baseUr
   };
 }
 
-export function buildWebinarGraph(webinar: PublicWebinarDetails, baseUrl = siteUrl()): JsonLdObject {
+export function buildWebinarGraph(webinar: PublicWebinarDetails, settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
   const url = `${baseUrl}/webinars/${encodeURIComponent(webinar.slug)}`;
   const eventId = `${url}#event`;
   const offers = webinar.tiers.map((tier) => {
@@ -146,11 +158,62 @@ export function buildWebinarGraph(webinar: PublicWebinarDetails, baseUrl = siteU
   return {
     "@context": "https://schema.org",
     "@graph": [
-      organizationEntity(baseUrl),
-      websiteEntity(baseUrl),
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
       webPageEntity(baseUrl, url, webinar.title, webinar.description, { "@id": eventId }),
       breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Live sessions", item: `${baseUrl}/webinars` }, { name: webinar.title, item: url }]),
       event,
+    ],
+  };
+}
+
+type ProductWithDetails = ProductListItem & { details?: string };
+
+function productEntity(product: ProductWithDetails, baseUrl: string): JsonLdObject {
+  const url = `${baseUrl}/products/${encodeURIComponent(product.slug)}`;
+  return {
+    "@type": "Product",
+    "@id": `${url}#product`,
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    description: product.description,
+    url,
+    image: product.imageUrl ? [`${baseUrl}${product.imageUrl}`] : undefined,
+    offers: {
+      "@type": "Offer",
+      price: (product.priceCents / 100).toFixed(2),
+      priceCurrency: "USD",
+      availability: product.inventoryQuantity > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      url,
+    },
+  };
+}
+
+export function buildProductIndexGraph(products: ProductListItem[], settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
+  const url = `${baseUrl}/products`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
+      webPageEntity(baseUrl, url, "Product catalog", `Physical products and shipped attendee kits from ${settings.displayName}.`, { "@type": "CollectionPage", "@id": `${url}#collection` }),
+      breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Product catalog", item: url }]),
+      { "@type": "ItemList", "@id": `${url}#products`, name: `${settings.displayName} products`, numberOfItems: products.length, itemListElement: products.map((product, index) => ({ "@type": "ListItem", position: index + 1, item: productEntity(product, baseUrl) })) },
+    ],
+  };
+}
+
+export function buildProductGraph(product: ProductWithDetails, settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
+  const url = `${baseUrl}/products/${encodeURIComponent(product.slug)}`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
+      webPageEntity(baseUrl, url, product.name, product.description, { "@id": `${url}#product` }),
+      breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Product catalog", item: `${baseUrl}/products` }, { name: product.name, item: url }]),
+      productEntity(product, baseUrl),
     ],
   };
 }
@@ -180,13 +243,13 @@ function placeEntity(location: ServiceLocation, baseUrl: string): JsonLdObject {
   };
 }
 
-export function buildLocationIndexGraph(locations: ServiceLocation[], baseUrl = siteUrl()): JsonLdObject {
+export function buildLocationIndexGraph(locations: ServiceLocation[], settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
   const url = `${baseUrl}/locations`;
   return {
     "@context": "https://schema.org",
     "@graph": [
-      organizationEntity(baseUrl),
-      websiteEntity(baseUrl),
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
       webPageEntity(baseUrl, url, "Service locations", "Virtual-first webinar facilitation and operations coverage examples.", { "@type": "CollectionPage", "@id": `${url}#collection` }),
       breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Service locations", item: url }]),
       {
@@ -203,18 +266,31 @@ export function buildLocationIndexGraph(locations: ServiceLocation[], baseUrl = 
   };
 }
 
-export function buildLocationGraph(location: ServiceLocation, baseUrl = siteUrl()): JsonLdObject {
+export function buildLocationGraph(location: ServiceLocation, settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
   const url = `${baseUrl}/locations/${encodeURIComponent(location.slug)}`;
   const service = serviceEntity(location, baseUrl);
   return {
     "@context": "https://schema.org",
     "@graph": [
-      organizationEntity(baseUrl),
-      websiteEntity(baseUrl),
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
       placeEntity(location, baseUrl),
       webPageEntity(baseUrl, url, location.title, location.summary, { "@id": `${url}#service` }),
       breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: "Service locations", item: `${baseUrl}/locations` }, { name: `${location.city}, ${location.region}`, item: url }]),
       service,
+    ],
+  };
+}
+
+export function buildContentPageGraph(page: ContentPage, settings: SiteSettings = DEFAULT_SITE_SETTINGS, baseUrl = siteUrl()): JsonLdObject {
+  const url = `${baseUrl}/pages/${encodeURIComponent(page.slug)}`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      organizationEntity(baseUrl, settings),
+      websiteEntity(baseUrl, settings),
+      webPageEntity(baseUrl, url, page.title, page.seoDescription || page.excerpt, { "@type": "WebPage", "@id": `${url}#content` }),
+      breadcrumbEntity(url, [{ name: "Home", item: baseUrl }, { name: page.title, item: url }]),
     ],
   };
 }

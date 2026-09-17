@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
 import { createSeatHold, DomainError } from "@/lib/data";
 import { getPrivateAccessToken } from "@/lib/private-access";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
@@ -11,6 +12,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     assertSameOrigin(request);
     await enforceRateLimit("hold", clientKey(request), 20, 10 * 60_000);
+    const currentUser = await getCurrentUser();
+    if (!currentUser) return NextResponse.json({ error: "Create or sign in to a customer account before reserving a seat." }, { status: 401 });
     const body = holdSchema.parse(await request.json());
     const result = await createSeatHold((await params).id, body.seatIds, await getPrivateAccessToken());
     return NextResponse.json({ hold: result });

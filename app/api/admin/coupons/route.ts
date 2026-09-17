@@ -1,0 +1,10 @@
+import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import { createCoupon, getCoupons } from "@/lib/catalog";
+import { DomainError } from "@/lib/errors";
+import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
+const schema = z.object({ code: z.string().trim().min(3).max(40), name: z.string().trim().min(2).max(120), discountType: z.enum(["percentage", "fixed_amount", "free_shipping"]), discountValue: z.number().int().min(0), minimumOrderCents: z.number().int().min(0), usageLimit: z.number().int().positive().nullable().optional(), perCustomerLimit: z.number().int().positive().nullable().optional(), startsAt: z.string().datetime({ offset: true }).nullable().optional(), endsAt: z.string().datetime({ offset: true }).nullable().optional(), status: z.enum(["draft", "active", "paused", "expired", "archived"]) });
+export async function GET() { const user = await getCurrentUser(); if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 }); try { return NextResponse.json({ coupons: await getCoupons() }); } catch { return NextResponse.json({ error: "Coupons could not be loaded." }, { status: 500 }); } }
+export async function POST(request: Request) { const user = await getCurrentUser(); if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 }); try { assertSameOrigin(request); const coupon = await createCoupon(schema.parse(await request.json()), user.id); revalidatePath("/admin/coupons"); return NextResponse.json({ coupon }, { status: 201 }); } catch (error) { if (error instanceof z.ZodError) return NextResponse.json({ error: "Complete the coupon fields." }, { status: 400 }); if (error instanceof DomainError) return NextResponse.json({ error: error.message }, { status: error.statusCode }); if (error instanceof RequestSecurityError) return NextResponse.json({ error: error.message }, { status: 403 }); return NextResponse.json({ error: "The coupon could not be created." }, { status: 500 }); } }

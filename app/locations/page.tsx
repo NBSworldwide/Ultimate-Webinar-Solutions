@@ -4,7 +4,9 @@ import Link from "next/link";
 import { serviceLocations } from "@/content/locations";
 import { EntityGraph } from "@/components/seo/entity-graph";
 import { PublicHeader } from "@/components/public-header";
+import { PublicFooter } from "@/components/public-footer";
 import { buildLocationIndexGraph } from "@/lib/seo";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const metadata: Metadata = {
   title: "Service locations",
@@ -12,10 +14,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/locations" },
 };
 
-export default function LocationsPage() {
+export default async function LocationsPage() {
+  const settings = await getSiteSettings();
   return (
     <div className="public-shell">
-      <EntityGraph data={buildLocationIndexGraph(serviceLocations)} />
+      <EntityGraph data={buildLocationIndexGraph(serviceLocations, settings)} />
       <PublicHeader />
       <main className="public-main" id="main-content">
         <div className="location-hero">
@@ -46,6 +49,7 @@ export default function LocationsPage() {
           <div className="location-principle-list"><div><strong>Plan in the right time zone</strong><p>Every session stores its UTC start time together with an IANA timezone for a clear attendee experience.</p></div><div><strong>Keep the live room human</strong><p>Facilitation patterns make space for questions, decisions, and a concrete next step.</p></div><div><strong>Close the loop</strong><p>Registration, delivery, and replay handoffs have an observable home in the operations workspace.</p></div></div>
         </section>
       </main>
+      <PublicFooter />
     </div>
   );
 }

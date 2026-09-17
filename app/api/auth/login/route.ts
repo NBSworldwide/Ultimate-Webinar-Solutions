@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authenticate, createSession, SESSION_COOKIE } from "@/lib/auth";
+import { authenticate, createSession, safeReturnPath, SESSION_COOKIE } from "@/lib/auth";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
 import { clientKey, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200) });
+const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200), returnTo: z.string().max(500).optional() });
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const user = await authenticate(body.email, body.password);
     if (!user) return NextResponse.json({ error: "Those credentials were not recognized." }, { status: 401 });
     const token = await createSession(user.id);
-    const response = NextResponse.json({ redirectTo: user.role === "admin" ? "/admin" : "/account" });
+    const response = NextResponse.json({ redirectTo: safeReturnPath(body.returnTo, user.role === "admin" ? "/admin" : "/account") });
     response.cookies.set({ name: SESSION_COOKIE, value: token, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 14 });
     return response;
   } catch (error) {

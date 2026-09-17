@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
+import { getSiteSettings } from "@/lib/site-settings";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const settings = await getSiteSettings();
   return {
-    name: "Webinar Studio",
-    short_name: "Webinar Studio",
-    description: "A standalone webinar operations and registration platform.",
+    name: settings.displayName,
+    short_name: settings.displayName,
+    description: settings.description,
     start_url: "/webinars",
     display: "standalone",
     background_color: "#f7fbff",

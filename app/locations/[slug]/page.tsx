@@ -4,8 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EntityGraph } from "@/components/seo/entity-graph";
 import { PublicHeader } from "@/components/public-header";
+import { PublicFooter } from "@/components/public-footer";
 import { getServiceLocation, serviceLocations } from "@/content/locations";
 import { buildLocationGraph } from "@/lib/seo";
+import { getSiteSettings } from "@/lib/site-settings";
 
 type LocationPageProps = { params: Promise<{ slug: string }> };
 
@@ -22,11 +24,12 @@ export async function generateMetadata({ params }: LocationPageProps): Promise<M
 export default async function LocationDetailPage({ params }: LocationPageProps) {
   const location = getServiceLocation((await params).slug);
   if (!location) notFound();
+  const settings = await getSiteSettings();
 
   const otherLocations = serviceLocations.filter((item) => item.slug !== location.slug);
   return (
     <div className="public-shell">
-      <EntityGraph data={buildLocationGraph(location)} />
+      <EntityGraph data={buildLocationGraph(location, settings)} />
       <PublicHeader />
       <main className="public-main" id="main-content">
         <Link href="/locations" className="breadcrumb"><ArrowLeft size={13} /> All service locations</Link>
@@ -56,6 +59,7 @@ export default async function LocationDetailPage({ params }: LocationPageProps) 
 
         <section className="related-locations" aria-labelledby="related-title"><div className="section-heading"><span className="eyebrow">Keep exploring</span><h2 id="related-title">Other sample coverage pages.</h2></div><div className="related-location-grid">{otherLocations.map((other) => <Link href={`/locations/${other.slug}`} className="related-location-card" key={other.slug}><span className="eyebrow">{other.timezone}</span><strong>{other.city}, {other.region}</strong><span>{other.summary}</span><ArrowUpRight size={15} /></Link>)}</div></section>
       </main>
+      <PublicFooter />
     </div>
   );
 }

@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import { StorePolicyPage } from "@/components/store-policy-page";
+export const metadata: Metadata = { title: "Refund policy" };
+export default function RefundPolicyPage() { return <StorePolicyPage eyebrow="Customer care" title="Refund policy." intro="Clear expectations for webinar registrations and shipped products." sections={[{ heading: "Demo release", body: "This standalone release records synthetic orders and registrations. No real payment is collected in demo mode, so no real refund is issued from this environment." }, { heading: "Production policy", body: "When a payment provider is connected, the site owner will publish the payment, cancellation, and refund terms that apply to each product or session before checkout." }, { heading: "Questions", body: "Keep your order number or registration details available when contacting support so the team can review the purchase and its fulfillment state." }]} />; }

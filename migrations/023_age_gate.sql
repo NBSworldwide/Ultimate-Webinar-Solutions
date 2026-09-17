@@ -1,0 +1,2 @@
+ALTER TABLE site_settings
+  ADD COLUMN IF NOT EXISTS age_gate_enabled BOOLEAN NOT NULL DEFAULT FALSE;

@@ -130,8 +130,11 @@ await checkRoute("/webinars", "text/html", (body, response) => {
     : { passed: false, detail: `${schema.detail}; missing headers: ${headers.join(", ") || "none"}` };
 });
 await checkRoute("/webinars/operations-readiness-briefing", "text/html", (body) => inspectJsonLd(body, ["Event", "RegisterAction", "Maya Chen"]));
+await checkRoute("/products", "text/html", (body) => inspectJsonLd(body, ["ItemList", "Product", "Field Notes Workbook"]));
+await checkRoute("/products/field-notebook", "text/html", (body) => inspectJsonLd(body, ["Product", "Offer", "Field Notes Workbook"]));
 await checkRoute("/locations", "text/html", (body) => inspectJsonLd(body, ["ItemList", "Service", "Chicago"]));
 await checkRoute("/locations/chicago-il", "text/html", (body) => inspectJsonLd(body, ["Service", "Place", "Chicago"]));
+await checkRoute("/pages/about-webinar-studio", "text/html", (body) => inspectJsonLd(body, ["WebPage", "Make every live session feel considered."]));
 await checkRoute("/api/webinars", "application/json", (body) => {
   try {
     const payload = JSON.parse(body);
@@ -142,8 +145,17 @@ await checkRoute("/api/webinars", "application/json", (body) => {
     return { passed: false, detail: "public API response was not valid JSON" };
   }
 });
-await checkRoute("/robots.txt", "text/plain", (body) => includesAll(body, ["/webinars", "/locations", "Sitemap:"]));
-await checkRoute("/sitemap.xml", "application/xml", (body) => includesAll(body, ["/webinars", "/locations", "operations-readiness-briefing", "chicago-il"]));
+await checkRoute("/api/products", "application/json", (body) => {
+  try {
+    const payload = JSON.parse(body);
+    const safe = Array.isArray(payload.products) && !/customerEmail|customerPhone|passwordHash/i.test(JSON.stringify(payload));
+    return { passed: safe, detail: safe ? "product catalog projection is public-safe" : "product API contains an internal field" };
+  } catch {
+    return { passed: false, detail: "product API response was not valid JSON" };
+  }
+});
+await checkRoute("/robots.txt", "text/plain", (body) => includesAll(body, ["/webinars", "/products", "/locations", "/pages", "Sitemap:"]));
+await checkRoute("/sitemap.xml", "application/xml", (body) => includesAll(body, ["/webinars", "/products", "/locations", "/pages/about-webinar-studio", "operations-readiness-briefing", "field-notebook", "chicago-il"]));
 await checkRedirect("/account");
 await checkRedirect("/admin");
 

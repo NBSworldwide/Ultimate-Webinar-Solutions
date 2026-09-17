@@ -5,29 +5,81 @@ import { ArrowRight, CalendarPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
-import type { PricingModel, PricingRounding, WebinarVisibility } from "@/lib/types";
+import type { PricingModel, PricingRounding, ProductListItem, WebinarDetails, WebinarVisibility } from "@/lib/types";
+import type { WebinarTemplate } from "@/lib/playbooks";
 
 function centsFromDollars(value: string): number {
   const dollars = Number(value);
   return Number.isFinite(dollars) && dollars >= 0 ? Math.round(dollars * 100) : 0;
 }
 
-export function WebinarForm() {
+function localDateTimeValue(value: string, timezone: string): string {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).reduce<Record<string, string>>((result, part) => {
+    if (part.type !== "literal") result[part.type] = part.value;
+    return result;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function zonedDateTimeToIso(value: string, timezone: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error("Enter a valid start time.");
+  const wallClock = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+  let candidate = wallClock;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(candidate)).reduce<Record<string, string>>((result, part) => {
+      if (part.type !== "literal") result[part.type] = part.value;
+      return result;
+    }, {});
+    const observed = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    const corrected = candidate + (wallClock - observed);
+    if (corrected === candidate) return new Date(candidate).toISOString();
+    candidate = corrected;
+  }
+  return new Date(candidate).toISOString();
+}
+
+export function WebinarForm({ webinar, template, products = [], defaultTimezone = "America/Chicago" }: { webinar?: WebinarDetails; template?: WebinarTemplate; products?: Array<ProductListItem & { details?: string }>; defaultTimezone?: string }) {
+  const primaryTier = webinar?.tiers[0];
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [eyebrow, setEyebrow] = useState("Live session");
-  const [description, setDescription] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState("75");
-  const [hostName, setHostName] = useState("");
-  const [tierName, setTierName] = useState("Standard seat");
-  const [price, setPrice] = useState("49.00");
-  const [itemValue, setItemValue] = useState("450.00");
-  const [capacity, setCapacity] = useState("20");
-  const [status, setStatus] = useState<"draft" | "published">("draft");
-  const [visibility, setVisibility] = useState<WebinarVisibility>("public");
-  const [pricingModel, setPricingModel] = useState<PricingModel>("fixed_per_seat");
-  const [roundingMode, setRoundingMode] = useState<PricingRounding>("exact_cents");
+  const [title, setTitle] = useState(webinar?.title ?? (template ? `${template.name} — new webinar` : ""));
+  const [eyebrow, setEyebrow] = useState(webinar?.eyebrow ?? template?.format ?? "Live session");
+  const [description, setDescription] = useState(webinar?.description ?? template?.description ?? "");
+  const [startsAt, setStartsAt] = useState(webinar ? localDateTimeValue(webinar.startsAt, webinar.timezone) : "");
+  const [durationMinutes, setDurationMinutes] = useState(String(webinar?.durationMinutes ?? template?.durationMinutes ?? 75));
+  const [timezone, setTimezone] = useState(webinar?.timezone ?? defaultTimezone);
+  const [hostName, setHostName] = useState(webinar?.hostName ?? "");
+  const [tierName, setTierName] = useState(primaryTier?.name ?? "Standard seat");
+  const [price, setPrice] = useState(primaryTier ? (primaryTier.priceCents / 100).toFixed(2) : "49.00");
+  const [itemValue, setItemValue] = useState(primaryTier?.referenceValueCents ? (primaryTier.referenceValueCents / 100).toFixed(2) : "450.00");
+  const [capacity, setCapacity] = useState(String(primaryTier?.capacity ?? template?.capacity ?? 20));
+  const [status, setStatus] = useState<"draft" | "published">(webinar?.status === "published" ? "published" : "draft");
+  const [visibility, setVisibility] = useState<WebinarVisibility>(webinar?.visibility ?? "public");
+  const [giveawayEnabled, setGiveawayEnabled] = useState(Boolean(webinar?.giveawayEnabled));
+  const [prizeProductId, setPrizeProductId] = useState(webinar?.prizeProductId ?? "");
+  const [claimDeadline, setClaimDeadline] = useState(webinar?.claimDeadline ? localDateTimeValue(webinar.claimDeadline, webinar.timezone) : "");
+  const [fulfillmentNotes, setFulfillmentNotes] = useState(webinar?.fulfillmentNotes ?? "");
+  const [registrationType, setRegistrationType] = useState<"paid" | "free">(primaryTier?.priceCents === 0 ? "free" : "paid");
+  const [pricingModel, setPricingModel] = useState<PricingModel>(primaryTier?.pricingModel ?? "fixed_per_seat");
+  const [roundingMode, setRoundingMode] = useState<PricingRounding>(primaryTier?.roundingMode ?? "exact_cents");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -35,6 +87,9 @@ export function WebinarForm() {
     const capacityValue = Math.max(1, Number(capacity) || 1);
     const referenceValueCents = centsFromDollars(itemValue);
     const fixedPriceCents = centsFromDollars(price);
+    if (registrationType === "free") {
+      return { priceCents: 0, referenceValueCents: null, projectedGrossCents: 0, upliftCents: null };
+    }
     if (pricingModel === "fixed_per_seat") {
       return { priceCents: fixedPriceCents, referenceValueCents: null, projectedGrossCents: fixedPriceCents * capacityValue, upliftCents: null };
     }
@@ -51,25 +106,24 @@ export function WebinarForm() {
       projectedGrossCents: priceCents * capacityValue,
       upliftCents: priceCents * capacityValue - referenceValueCents,
     };
-  }, [capacity, itemValue, price, pricingModel, roundingMode]);
+  }, [capacity, itemValue, price, pricingModel, registrationType, roundingMode]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const parsedStart = new Date(startsAt);
-      if (Number.isNaN(parsedStart.getTime())) throw new Error("Enter a valid start time.");
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
-      const response = await fetch("/api/admin/webinars", {
-        method: "POST",
+      const selectedTimezone = timezone || defaultTimezone || "America/Chicago";
+      const startsAtIso = zonedDateTimeToIso(startsAt, selectedTimezone);
+      const response = await fetch(webinar ? `/api/admin/webinars/${encodeURIComponent(webinar.id)}` : "/api/admin/webinars", {
+        method: webinar ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
           eyebrow,
           description,
-          startsAt: parsedStart.toISOString(),
-          timezone,
+          startsAt: startsAtIso,
+          timezone: selectedTimezone,
           durationMinutes: Number(durationMinutes),
           hostName,
           tierName,
@@ -77,23 +131,27 @@ export function WebinarForm() {
           capacity: Number(capacity),
           status,
           visibility,
-          pricingModel,
-          referenceValueCents: pricingPreview.referenceValueCents,
-          roundingMode,
+          pricingModel: registrationType === "free" ? "fixed_per_seat" : pricingModel,
+          referenceValueCents: registrationType === "free" ? null : pricingPreview.referenceValueCents,
+          roundingMode: registrationType === "free" ? "exact_cents" : roundingMode,
+          giveawayEnabled,
+          prizeProductId: giveawayEnabled ? prizeProductId || null : null,
+          claimDeadline: giveawayEnabled && claimDeadline ? zonedDateTimeToIso(claimDeadline, selectedTimezone) : null,
+          fulfillmentNotes: giveawayEnabled ? fulfillmentNotes : "",
         }),
       });
       const data = await response.json() as { webinar?: { id: string }; error?: string };
-      if (!response.ok || !data.webinar) throw new Error(data.error ?? "The webinar could not be created.");
+      if (!response.ok || !data.webinar) throw new Error(data.error ?? `The webinar could not be ${webinar ? "updated" : "created"}.`);
       router.push(`/admin/webinars/${data.webinar.id}`);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The webinar could not be created.");
+      setError(failure instanceof Error ? failure.message : `The webinar could not be ${webinar ? "updated" : "created"}.`);
       setSaving(false);
     }
   }
 
   return (
     <form className="admin-form-card" onSubmit={submit}>
-      <h2>Session details</h2>
+      <h2>{webinar ? "Edit webinar details" : "Session details"}</h2>
       <div className="form-grid">
         <div className="field">
           <label htmlFor="webinar-title">Title</label>
@@ -124,6 +182,18 @@ export function WebinarForm() {
             <input id="webinar-duration" name="durationMinutes" type="number" min="15" max="480" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required />
           </div>
         </div>
+        <div className="field">
+          <label htmlFor="webinar-timezone">Session time zone</label>
+          <input id="webinar-timezone" name="timezone" list="webinar-timezone-options" value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="America/Chicago" required />
+          <datalist id="webinar-timezone-options">
+            <option value="America/Los_Angeles" />
+            <option value="America/Denver" />
+            <option value="America/Chicago" />
+            <option value="America/New_York" />
+            <option value="UTC" />
+          </datalist>
+          <small>Defaults to the site time zone from Settings. Use an IANA value such as America/Chicago.</small>
+        </div>
 
         <h2 style={{ marginTop: 12 }}>Visibility and access</h2>
         <div className="form-row">
@@ -144,6 +214,36 @@ export function WebinarForm() {
           </div>
         </div>
 
+        <h2 style={{ marginTop: 12 }}>Giveaway and prize</h2>
+        <div className="field">
+          <label className="check-field" htmlFor="webinar-giveaway-enabled">
+            <input id="webinar-giveaway-enabled" type="checkbox" checked={giveawayEnabled} onChange={(event) => setGiveawayEnabled(event.target.checked)} />
+            <span>Attach one catalog product as the session giveaway prize</span>
+          </label>
+          <small>The raffle will use eligible seats from this session. The prize details are saved with the session so later catalog edits do not change the configured giveaway.</small>
+        </div>
+        {giveawayEnabled ? <>
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="webinar-prize-product">Prize product</label>
+              <select id="webinar-prize-product" value={prizeProductId} onChange={(event) => setPrizeProductId(event.target.value)} required={giveawayEnabled}>
+                <option value="">Choose one product</option>
+                {products.filter((product) => product.status === "active" || product.id === prizeProductId).map((product) => <option value={product.id} key={product.id}>{product.name} · {product.sku}</option>)}
+              </select>
+              <small>Only one prize is supported per session in this release.</small>
+            </div>
+            <div className="field">
+              <label htmlFor="webinar-claim-deadline">Winner claim deadline</label>
+              <input id="webinar-claim-deadline" type="datetime-local" value={claimDeadline} onChange={(event) => setClaimDeadline(event.target.value)} required={giveawayEnabled} />
+              <small>Use the session time zone shown above.</small>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="webinar-fulfillment-notes">Fulfillment notes</label>
+            <textarea id="webinar-fulfillment-notes" rows={4} value={fulfillmentNotes} onChange={(event) => setFulfillmentNotes(event.target.value)} placeholder="How the winner should claim the prize, shipping steps, contact details, or pickup instructions." required={giveawayEnabled} />
+          </div>
+        </> : null}
+
         <h2 style={{ marginTop: 12 }}>Primary seat tier</h2>
         <div className="form-row">
           <div className="field">
@@ -156,18 +256,26 @@ export function WebinarForm() {
           </div>
         </div>
         <div className="field">
+          <label htmlFor="registration-type">Registration price</label>
+          <label className="check-field" htmlFor="registration-type">
+            <input id="registration-type" name="registrationType" type="checkbox" checked={registrationType === "free"} onChange={(event) => setRegistrationType(event.target.checked ? "free" : "paid")} />
+            <span>Free webinar — no payment required</span>
+          </label>
+          <small>{registrationType === "free" && visibility === "private" ? "Private free webinars still require an invitation code." : registrationType === "free" ? "Free webinars remain available in the public catalog when published." : "Leave unchecked to use the paid seat-pricing controls below."}</small>
+        </div>
+        {registrationType === "paid" ? <div className="field">
           <label htmlFor="pricing-model">Pricing method</label>
           <select id="pricing-model" name="pricingModel" value={pricingModel} onChange={(event) => setPricingModel(event.target.value as PricingModel)}>
             <option value="fixed_per_seat">Fixed price per seat</option>
             <option value="split_total_value">Split total item value across seats</option>
           </select>
-        </div>
-        {pricingModel === "fixed_per_seat" ? (
+        </div> : null}
+        {registrationType === "paid" && pricingModel === "fixed_per_seat" ? (
           <div className="field">
             <label htmlFor="tier-price">Price per seat (USD)</label>
             <input id="tier-price" name="price" type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} required />
           </div>
-        ) : (
+        ) : registrationType === "paid" ? (
           <div className="form-row">
             <div className="field">
               <label htmlFor="item-value">Total item value (USD)</label>
@@ -183,9 +291,9 @@ export function WebinarForm() {
               </select>
             </div>
           </div>
-        )}
+        ) : null}
         <div className="pricing-preview" aria-live="polite">
-          <div><span className="eyebrow">Pricing preview</span><strong>{formatMoney(pricingPreview.priceCents)} per seat</strong></div>
+          <div><span className="eyebrow">Pricing preview</span><strong>{registrationType === "free" ? "Free registration" : `${formatMoney(pricingPreview.priceCents)} per seat`}</strong></div>
           <div><span>Projected gross</span><strong>{formatMoney(pricingPreview.projectedGrossCents)}</strong></div>
           {pricingPreview.upliftCents !== null ? <div><span>Rounding uplift</span><strong>{formatMoney(pricingPreview.upliftCents)}</strong></div> : null}
         </div>
@@ -193,7 +301,7 @@ export function WebinarForm() {
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="form-actions">
         <Link href="/admin/webinars" className="button button-secondary">Cancel</Link>
-        <button className="button" type="submit" disabled={saving}><CalendarPlus size={15} />{saving ? "Creating…" : "Create webinar"}<ArrowRight size={14} /></button>
+        <button className="button" type="submit" disabled={saving}><CalendarPlus size={15} />{saving ? webinar ? "Saving…" : "Creating…" : webinar ? "Save changes" : "Create webinar"}<ArrowRight size={14} /></button>
       </div>
     </form>
   );

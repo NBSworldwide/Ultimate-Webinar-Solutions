@@ -8,20 +8,20 @@ import { clientKey, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 const registrationSchema = z.object({
   holdToken: z.string().min(20).max(200),
-  name: z.string().trim().min(2).max(120),
-  email: z.string().email().max(200),
   phone: z.string().trim().min(7).max(40),
   consent: z.boolean(),
+  smsConsent: z.boolean().default(false),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     assertSameOrigin(request);
     await enforceRateLimit("registration", clientKey(request), 30, 10 * 60_000);
+    const currentUser = await getCurrentUser();
+    if (!currentUser) return NextResponse.json({ error: "Create or sign in to a customer account before completing registration." }, { status: 401 });
     const webinarId = (await params).id;
     const body = registrationSchema.parse(await request.json());
-    const currentUser = await getCurrentUser();
-    const result = await completeRegistration({ ...body, webinarId, userId: currentUser?.id ?? null, privateAccessToken: await getPrivateAccessToken() });
+    const result = await completeRegistration({ ...body, webinarId, userId: currentUser.id, name: currentUser.name, email: currentUser.email, privateAccessToken: await getPrivateAccessToken() });
     return NextResponse.json({ success: true, registration: { groupId: result.groupId, webinarTitle: result.webinarTitle, registrationCount: result.registrationIds.length } });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Check the registration details and try again." }, { status: 400 });

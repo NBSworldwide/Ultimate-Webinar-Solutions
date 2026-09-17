@@ -1,0 +1,8 @@
+"use client";
+
+import { Tag } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { CrmContactView, CrmTagView } from "@/lib/types";
+
+export function CrmTagForm({ contact, tags }: { contact: CrmContactView; tags: CrmTagView[] }) { const router = useRouter(); const [tagId, setTagId] = useState(tags.find((tag) => !contact.tags.some((current) => current.id === tag.id))?.id ?? ""); const [message, setMessage] = useState(""); async function change(method: "POST" | "DELETE", value: string) { if (!value) return; const response = await fetch(`/api/admin/crm/contacts/${encodeURIComponent(contact.id)}/tags`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tagId: value }) }); const data = await response.json() as { error?: string }; if (!response.ok) { setMessage(data.error ?? "The tag could not be updated."); return; } setMessage(""); router.refresh(); } return <div className="crm-tags"><div className="tag-list">{contact.tags.map((tag) => <button className="tag-chip" key={tag.id} type="button" onClick={() => void change("DELETE", tag.id)} title={`Remove ${tag.name}`}>{tag.name} ×</button>)}</div><div className="form-actions"><select aria-label={`Add tag to ${contact.name}`} value={tagId} onChange={(event) => setTagId(event.target.value)}><option value="">Add tag…</option>{tags.filter((tag) => !contact.tags.some((current) => current.id === tag.id)).map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select><button className="button button-small" type="button" disabled={!tagId} onClick={() => void change("POST", tagId)}><Tag size={13} /> Add</button>{message ? <span className="form-error">{message}</span> : null}</div></div>; }

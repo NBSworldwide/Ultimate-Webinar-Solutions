@@ -17,7 +17,7 @@ Open <http://localhost:3000>.
 
 Seeded samples never create login accounts or default passwords. To access the local admin, set `INITIAL_ADMIN_EMAIL` and a strong `INITIAL_ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:create-admin`.
 
-The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection string before running the migration or seed commands. Neon is used by the deployed Vercel app; a separate Neon branch or local PostgreSQL database is recommended for development. Migrations are explicit and safe to rerun. `pnpm db:seed` creates only synthetic webinar, ticket, seat, and registration samples; it refuses to seed over unmarked application data. No payment gateway, email provider, SMS provider, or webinar provider is contacted by the demo.
+The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection string before running the migration or seed commands. Neon is used by the deployed Vercel app; a separate Neon branch or local PostgreSQL database is recommended for development. Migrations are explicit and safe to rerun. `pnpm db:seed` creates only synthetic webinar, ticket, seat, registration, and product samples; it refuses to seed over unmarked application data. No payment gateway, carrier, email provider, SMS provider, or webinar provider is contacted by the demo. `INTEGRATION_ENCRYPTION_KEY` should be a unique random secret of at least 32 characters in any environment where provider credentials will be saved; the application falls back to `SESSION_SECRET` only for development compatibility.
 
 `DEMO_MODE` applies only to local development. Production sample records are inserted by the explicit seed command, never on a request or cold start. Sample data never creates login accounts. Production checkout remains disabled until a real payment provider is configured. Set a unique, random `SESSION_SECRET` (at least 32 characters) and `APP_URL` in Vercel. Create the first production admin with `pnpm db:create-admin` using `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 20 characters; the command refuses to overwrite an existing admin.
 
@@ -25,15 +25,25 @@ The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection str
 
 - Next.js App Router with TypeScript and React.
 - Managed PostgreSQL through Neon, with versioned SQL migrations and parameterized queries.
-- Atomic, server-side seat holds with a ten-minute expiry.
+- Atomic, server-side seat holds with a five-minute expiry; customer accounts are required before a seat is removed from inventory.
 - Explicit seat states: available, held, sold.
 - Registration records tied to webinar, tier, seat, and registration group.
 - Admin session authentication with HTTP-only cookies.
 - Admin dashboard, webinar management, seat map, registration table, winner draw, planning calculator, and playbook templates.
-- Public webinar catalog, session detail pages, registration form, and attendee account portal.
+- WordPress-familiar admin shell with grouped navigation, Add New shortcuts, edit screens, explicit draft/published states, inline product editing, and email template revision history.
+- Editable site and company profile with display/legal name, tagline, logo URL, contact details, address, operating details, policy links, and social links reused by public chrome, metadata, JSON-LD, and correspondence payloads.
+- Optional site-wide 18+ visitor gate managed from the company profile; it stores a 30-day browser acknowledgement and excludes login, admin, API, and framework routes.
+- WordPress-familiar visual page management with reusable hero, text, image, call-to-action, and spacer blocks; drag-and-drop ordering; live preview; revision history; draft/published/archived states; and guarded permanent deletion.
+- Public webinar catalog, session detail pages, account-gated registration, five-second seat availability refresh, and attendee account portal.
+- Standalone physical-product catalog with SKUs, inventory, shipping checkout, order records, and admin fulfillment/tracking states.
 - Three synthetic virtual-first service-location pages with local landing-page content and internal links.
 - Native JSON-LD entity graphs for the organization, website, webinars, services, locations, and breadcrumbs.
 - Queued delivery ledger for email/SMS work with idempotency keys.
+- Admin provider chooser for Cloudflare Stream, Mux, or Amazon IVS, plus Resend, Postmark, or SendGrid; provider credentials are encrypted server-side and never returned to the browser.
+- Session giveaway setup with one catalog-linked prize, immutable product snapshot, claim deadline, fulfillment notes, manual host draw, scheduled end-of-session draw, winner/non-winner outcome fields, and queued result emails.
+- Email correspondence center with reusable templates, timed sequences, suppression records, and a provider-neutral outbox.
+- SMS notification center with independent consent, registration reminders, winner alerts, a mock provider, a Twilio adapter boundary, delivery callbacks, and a scheduled outbox worker.
+- CRM with unified email-keyed contacts, lifecycle stages, consent state, tags, internal notes, and activity timelines.
 - Health endpoint at `/api/health`.
 - Robots and sitemap routes for the public experience.
 - Local Next.js DevTools MCP configuration and an `agentic-readiness` smoke scan that checks the public contract, data boundary, metadata, security headers, and auth redirects.
@@ -54,9 +64,9 @@ The project keeps the useful product ideas from `v3-refactor-plan-technical.pdf`
 
 The deployed release is a synthetic-data demo and intentionally does not process real payments. Before using it for live registrations, add:
 
-1. A real payment adapter with webhook verification and PCI-safe token handling.
-2. Queue workers for the delivery ledger and provider synchronization.
-3. LiveStorm/Zoom, Twilio, and email adapters with retries, redacted logs, and idempotency.
+1. A real payment adapter with webhook verification and PCI-safe token handling for both webinar seats and physical products.
+2. A carrier/shipping adapter, package labels, tax calculation, returns, and queue workers for fulfillment and provider synchronization.
+3. Activate the selected live-stream and email provider adapters with retries, redacted logs, webhook verification, and idempotency. The admin chooser and encrypted credential store are ready; provider calls remain disabled until the adapters, sender/domain verification, stream lifecycle callbacks, and replay access controls are completed. The SMS outbox, mock provider, Twilio adapter boundary, and worker are implemented; add the provider credentials, sender registration, consent review, and callback verification before enabling real SMS. The protected webinar lifecycle worker marks scheduled sessions complete and triggers an automatic drawing; connect the selected stream provider's verified end-of-stream event to the same domain boundary for early or provider-confirmed endings.
 4. Password-reset and account-recovery flows.
 5. Shared edge/Redis rate limiting, expanded CSRF/risk controls for browser mutations, and a full permission matrix.
 6. Persistent template, scheduling, and backup-webinar administration.
@@ -73,6 +83,12 @@ pnpm lighthouse http://localhost:3000/webinars --output=html --output-path=./lig
 ```
 
 `pnpm readiness:agentic` expects the local app at `http://localhost:3000`. Set `READINESS_REQUIRE_GIT=true` in the release gate so it also requires a clean `main` branch with a commit. The scan is intentionally read-only and does not send customer, product, or registration data to an AI service.
+
+The scheduled webinar lifecycle worker accepts `CRON_SECRET` (or the optional `WEBINAR_WORKER_SECRET`) and runs alongside the SMS worker. It completes sessions whose scheduled duration has elapsed and performs an automatic giveaway draw when an eligible registration exists.
+
+### SMS setup
+
+SMS is disabled unless `SMS_ENABLED=true`. Local development uses `SMS_PROVIDER=mock`, which marks due messages as sent without contacting a carrier. For production, set `SMS_PROVIDER=twilio`, add the Twilio account, auth token, and Messaging Service SID as server-side Vercel environment variables, and set `SMS_WORKER_SECRET` or `CRON_SECRET`. The `/api/internal/sms/process` route is scheduled every five minutes by `vercel.json`; it accepts only the configured worker secret. Complete sender registration and confirm the SMS consent language before enabling real delivery.
 
 The Lighthouse CLI is pinned in `package.json` for repeatable local release checks. For a complete report, use both `--output=html` and `--output=json`; reports should be written to a local artifact directory and kept out of Git.
 

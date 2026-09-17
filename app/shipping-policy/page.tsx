@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import { StorePolicyPage } from "@/components/store-policy-page";
+export const metadata: Metadata = { title: "Shipping policy" };
+export default function ShippingPolicyPage() { return <StorePolicyPage eyebrow="Customer care" title="Shipping policy." intro="Explain how standalone products are packed, shipped, and tracked." sections={[{ heading: "Fulfillment", body: "Product orders move through the admin fulfillment states: unfulfilled, packing, shipped, delivered, or cancelled." }, { heading: "Tracking", body: "Once a shipment is marked shipped, the order can store a carrier and tracking number for the customer record and shipment confirmation message." }, { heading: "Inventory", body: "Local inventory is authoritative in demo mode. An external inventory adapter can be connected through the Inventory sources management section." }]} />; }

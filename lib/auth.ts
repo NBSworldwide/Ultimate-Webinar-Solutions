@@ -1,11 +1,26 @@
 import { cookies } from "next/headers";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { assertStandaloneDataset, getDb } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import type { User } from "@/lib/types";
 
 export const SESSION_COOKIE = "webinar_session";
 const SESSION_DAYS = 14;
+
+export class AccountCreationError extends Error {
+  statusCode = 409;
+
+  constructor(message = "An account with that email already exists. Sign in instead.") {
+    super(message);
+    this.name = "AccountCreationError";
+  }
+}
+
+/** Only allow local paths when a sign-in or account-creation flow returns a customer to a session. */
+export function safeReturnPath(value: string | null | undefined, fallback: string): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || /[\r\n]/.test(value)) return fallback;
+  return value;
+}
 
 function hashToken(value: string): string {
   const secret = process.env.SESSION_SECRET;
@@ -17,6 +32,28 @@ function hashToken(value: string): string {
 
 function toUser(row: { id: string; email: string; name: string; role: "admin" | "attendee" }): User {
   return { id: row.id, email: row.email, name: row.name, role: row.role };
+}
+
+export async function createAttendeeAccount(input: { name: string; email: string; password: string }): Promise<User> {
+  await assertStandaloneDataset();
+  const user = {
+    id: randomUUID(),
+    email: input.email.trim().toLowerCase(),
+    name: input.name.trim(),
+    role: "attendee" as const,
+  };
+  try {
+    await getDb().query(
+      "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      [user.id, user.email, user.name, user.role, hashPassword(input.password), new Date().toISOString()],
+    );
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      throw new AccountCreationError();
+    }
+    throw error;
+  }
+  return user;
 }
 
 export async function authenticate(email: string, password: string): Promise<User | null> {

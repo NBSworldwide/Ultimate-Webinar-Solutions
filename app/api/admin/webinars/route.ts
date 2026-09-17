@@ -30,9 +30,16 @@ const createSchema = z.object({
   pricingModel: z.enum(["fixed_per_seat", "split_total_value"]).default("fixed_per_seat"),
   referenceValueCents: z.number().int().min(0).max(100000000).nullable().optional(),
   roundingMode: z.enum(["exact_cents", "nearest_dollar", "round_up_dollar"]).default("exact_cents"),
+  giveawayEnabled: z.boolean().default(false),
+  prizeProductId: z.string().trim().min(1).nullable().optional(),
+  claimDeadline: z.string().datetime({ offset: true }).nullable().optional(),
+  fulfillmentNotes: z.string().trim().max(3000).default(""),
 }).superRefine((value, context) => {
   if (value.pricingModel === "split_total_value" && value.referenceValueCents === null || value.pricingModel === "split_total_value" && value.referenceValueCents === undefined) {
     context.addIssue({ code: "custom", path: ["referenceValueCents"], message: "A total item value is required for split pricing." });
+  }
+  if (value.giveawayEnabled && !value.prizeProductId) {
+    context.addIssue({ code: "custom", path: ["prizeProductId"], message: "Choose a prize product." });
   }
 });
 

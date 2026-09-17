@@ -1,0 +1,4 @@
+import Link from "next/link";
+import { PublicFooter } from "@/components/public-footer";
+import { PublicHeader } from "@/components/public-header";
+export function StorePolicyPage({ title, eyebrow, intro, sections }: { title: string; eyebrow: string; intro: string; sections: Array<{ heading: string; body: string }> }) { return <div className="public-shell"><PublicHeader /><main className="public-main content-page-main" id="main-content"><section className="public-hero"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{intro}</p></section><article className="content-block content-block-rich-text">{sections.map((section) => <section key={section.heading}><h2>{section.heading}</h2><p>{section.body}</p></section>)}<p><Link href="/locations" className="panel-link">Need help? Contact the site owner.</Link></p></article></main><PublicFooter /></div>; }

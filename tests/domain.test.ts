@@ -36,6 +36,60 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, 'attendee', $4, NOW()::text)",
       ["user_test_attendee", "attendee@example.test", "Test Attendee", "test-only-hash"],
     );
+    const { createAttendeeAccount } = await import("@/lib/auth");
+    const testCustomer = await createAttendeeAccount({ name: "Synthetic Checkout Customer", email: "checkout.customer@example.test", password: "synthetic-test-password" });
+    const privateCustomer = await createAttendeeAccount({ name: "Synthetic Private Customer", email: "free.private@example.test", password: "synthetic-private-password" });
+    assert.equal(testCustomer.role, "attendee");
+    const { getSiteSettings, updateSiteSettings } = await import("@/lib/site-settings");
+    const defaultSiteSettings = await getSiteSettings();
+    assert.equal(defaultSiteSettings.displayName, "Webinar Studio");
+    const savedSiteSettings = await updateSiteSettings({
+      displayName: "Demo Operations Co.", legalName: "Demo Operations Co. LLC", tagline: "Practical live learning for modern teams.", description: "A synthetic company profile used to verify reusable site identity settings.",
+      logoUrl: "/demo-logo.svg", logoAlt: "Demo Operations Co.", primaryEmail: "hello@example.test", supportEmail: "support@example.test", phone: "+1 555 010 0142",
+      addressLine1: "100 Demo Way", addressLine2: "Suite 200", city: "Arlington", region: "TX", postalCode: "76014", country: "US", websiteUrl: "https://example.test",
+      timezone: "America/Chicago", currency: "USD", supportUrl: "https://example.test/support", privacyUrl: "https://example.test/privacy", termsUrl: "https://example.test/terms", shippingPolicyUrl: "https://example.test/shipping", businessHours: "Monday-Friday, 9 AM-5 PM Central",
+      linkedinUrl: "https://linkedin.com/company/example", facebookUrl: "", instagramUrl: "https://instagram.com/example",
+    }, "user_test_admin");
+    assert.equal(savedSiteSettings.displayName, "Demo Operations Co.");
+    assert.deepEqual((await getSiteSettings()).addressLine1, "100 Demo Way");
+    const { getIntegrationSettings, updateIntegrationSettings } = await import("@/lib/integrations");
+    const previousIntegrationKey = process.env.INTEGRATION_ENCRYPTION_KEY;
+    const previousSessionSecret = process.env.SESSION_SECRET;
+    process.env.INTEGRATION_ENCRYPTION_KEY = "test-only-integration-key-with-32-characters";
+    const savedIntegrations = await updateIntegrationSettings({
+      streamingProvider: "cloudflare_stream",
+      emailProvider: "resend",
+      streamingValues: { accountId: "cloudflare-account-test", apiToken: "stream-secret-test", webhookSecret: "" },
+      emailValues: { apiKey: "resend-secret-test", fromEmail: "Webinars <hello@example.test>", replyTo: "" },
+    }, "user_test_admin");
+    assert.equal(savedIntegrations.streamingProvider, "cloudflare_stream");
+    assert.equal(savedIntegrations.emailProvider, "resend");
+    assert.equal(savedIntegrations.streamingValues.accountId, "cloudflare-account-test");
+    assert.ok(savedIntegrations.savedStreamingSecrets.includes("apiToken"));
+    assert.ok(savedIntegrations.savedEmailSecrets.includes("apiKey"));
+    assert.equal(savedIntegrations.streamingValues.apiToken, undefined);
+    assert.equal((await getIntegrationSettings()).emailValues.fromEmail, "Webinars <hello@example.test>");
+    process.env.INTEGRATION_ENCRYPTION_KEY = previousIntegrationKey;
+    process.env.SESSION_SECRET = previousSessionSecret;
+    const { createPage, deletePage, getPages, getPublishedPageBySlug, updatePage } = await import("@/lib/pages");
+    const samplePages = await getPages({ status: "published" });
+    assert.equal(samplePages.length, 2);
+    assert.equal((await getPublishedPageBySlug("about-webinar-studio"))?.title, "About Webinar Studio");
+    const editablePage = await createPage({
+      slug: "editor-lifecycle-check", title: "Editor lifecycle check", excerpt: "A synthetic page used to verify the visual editor lifecycle.", status: "draft",
+      blocks: [{ type: "hero", data: { heading: "Draft content", body: "This content is synthetic." } }], seoTitle: "", seoDescription: "",
+    }, "user_test_admin");
+    assert.equal(editablePage.status, "draft");
+    await assert.rejects(deletePage(editablePage.id, "user_test_admin"), /Archive a page/);
+    const publishedPage = await updatePage(editablePage.id, {
+      slug: editablePage.slug, title: editablePage.title, excerpt: editablePage.excerpt, status: "published", blocks: [...editablePage.blocks, { type: "cta", data: { heading: "Continue", buttonLabel: "Browse", buttonHref: "/webinars" } }], seoTitle: "Lifecycle check", seoDescription: "A synthetic published page.",
+    }, "user_test_admin");
+    assert.equal(publishedPage.status, "published");
+    assert.equal((await getPublishedPageBySlug(editablePage.slug))?.blocks.length, 2);
+    const archivedPage = await updatePage(editablePage.id, { slug: editablePage.slug, title: editablePage.title, excerpt: editablePage.excerpt, status: "archived", blocks: publishedPage.blocks, seoTitle: publishedPage.seoTitle, seoDescription: publishedPage.seoDescription }, "user_test_admin");
+    assert.equal(archivedPage.status, "archived");
+    await deletePage(editablePage.id, "user_test_admin");
+    assert.equal((await getPages({ query: "editor-lifecycle-check" })).some((item) => item.id === editablePage.id), false);
     await getDb().query("UPDATE registrations SET user_id = 'user_test_attendee' WHERE id = 'registration-demo-1'");
     const { enforceRateLimit, RateLimitError } = await import("@/lib/rate-limit");
     await enforceRateLimit("test-login", "192.0.2.10", 2, 60_000);
@@ -51,13 +105,19 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       DomainError,
       getCustomerRegistrations,
       getCustomerReplayAccess,
+      getRecentRegistrations,
+      getWebinars,
       getPublicWebinars,
       getWebinarBySlug,
       getPublicWebinarBySlug,
+      getSeatAvailability,
       getPrivateWebinarBySlug,
+      getPrivateWebinarRoomBySlug,
       getDashboardData,
       drawWinner,
+      processEndedWebinars,
       createWebinar,
+      updateWebinar,
       createWebinarInvites,
     } = await import("@/lib/data");
     const { generateInviteCode, hashInviteCode, normalizeInviteCode, normalizeInviteEmail } = await import("@/lib/private-access-core");
@@ -71,6 +131,9 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const publicWebinars = await getPublicWebinars();
     assert.equal(publicWebinars.length, 2);
     assert.equal("revenueCents" in publicWebinars[0], false);
+    assert.equal((await getWebinars(false, { query: "readiness", status: "published", visibility: "public" })).length, 1);
+    assert.equal((await getWebinars(false, { status: "draft" })).length, 1);
+    assert.equal((await getRecentRegistrations(40, { query: "Avery", paymentStatus: "paid", accessStatus: "active" })).length, 1);
 
     const dashboard = await getDashboardData();
     assert.equal(dashboard.stats.registrations, 5);
@@ -83,9 +146,16 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
 
     const hold = await createSeatHold(published.id, [availableSeat.id]);
     assert.equal(hold.seats.length, 1);
+    const availabilityWhileHeld = await getSeatAvailability(published.id);
+    assert.equal(availabilityWhileHeld?.tiers.flatMap((tier) => tier.seats).find((seat) => seat.id === availableSeat.id)?.status, "held");
     await assert.rejects(
       createSeatHold(published.id, [availableSeat.id]),
       (error: unknown) => error instanceof DomainError && /being held/.test(error.message),
+    );
+
+    await assert.rejects(
+      completeRegistration({ webinarId: published.id, holdToken: hold.holdToken, name: "Unauthenticated Attendee", email: "unauthenticated@example.test", phone: "+1 555 010 0198", consent: false }),
+      (error: unknown) => error instanceof DomainError && error.statusCode === 401,
     );
 
     const registration = await completeRegistration({
@@ -95,6 +165,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       email: "synthetic.test@example.test",
       phone: "+1 555 010 0199",
       consent: false,
+      userId: testCustomer.id,
     });
     assert.equal(registration.registrationIds.length, 1);
     await assert.rejects(
@@ -136,6 +207,23 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal(managed.capacity, 3);
     assert.equal(managed.timezone, "America/Chicago");
     assert.equal(managed.tiers[0].seats.length, 3);
+    const managedSlug = managed.slug;
+    const updatedManaged = await updateWebinar(managed.id, {
+      title: "Synthetic Management Test Updated",
+      eyebrow: "Operations test",
+      description: "An updated synthetic webinar used to verify the database-backed edit workflow.",
+      startsAt: new Date(Date.now() + 172_800_000).toISOString(),
+      timezone: "America/Chicago",
+      durationMinutes: 75,
+      hostName: "Updated Test Host",
+      tierName: "General admission",
+      priceCents: 2500,
+      capacity: 4,
+      status: "published",
+    }, "user_test_admin");
+    assert.equal(updatedManaged.slug, managedSlug);
+    assert.equal(updatedManaged.status, "published");
+    assert.equal(updatedManaged.tiers[0].seats.length, 4);
 
     const { resolveTierPricing } = await import("@/lib/data");
     const pricingInput = {
@@ -172,6 +260,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       capacity: 2,
       priceCents: 500,
     }, "user_test_admin");
+    assert.equal((await getWebinars(false, { visibility: "private" })).length, 1);
     const generatedInvites = await createWebinarInvites(privateWebinar.id, [" Private.Attendee@example.test ", "second@example.test" ], "user_test_admin");
     assert.equal(generatedInvites.length, 2);
     assert.equal(generatedInvites[0].email, "private.attendee@example.test");
@@ -198,6 +287,200 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       createWebinarInvites(published.id, ["not-private@example.test"], "user_test_admin"),
       (error: unknown) => error instanceof DomainError && /only be created for private webinars/.test(error.message),
     );
+
+    const freePublic = await createWebinar({
+      ...pricingInput,
+      title: "Synthetic Free Public Session",
+      visibility: "public",
+      status: "published",
+      capacity: 2,
+      priceCents: 0,
+    }, "user_test_admin");
+    const freePublicSeat = freePublic.tiers[0]?.seats.find((seat) => seat.status === "available");
+    assert.ok(freePublicSeat);
+    const freePublicHold = await createSeatHold(freePublic.id, [freePublicSeat.id]);
+    const previousVercelEnvironment = process.env.VERCEL_ENV;
+    process.env.VERCEL_ENV = "production";
+    const freeRegistration = await completeRegistration({
+      webinarId: freePublic.id,
+      holdToken: freePublicHold.holdToken,
+      name: "Free Public Attendee",
+      email: "free.public@example.test",
+      phone: "+1 555 010 3301",
+      consent: true,
+      smsConsent: true,
+      userId: testCustomer.id,
+    });
+    process.env.VERCEL_ENV = previousVercelEnvironment;
+    const freeRegistrationRow = await getDb().query<{ payment_status: string }>("SELECT payment_status FROM registrations WHERE id = $1", [freeRegistration.registrationIds[0]]);
+    assert.equal(freeRegistrationRow.rows[0]?.payment_status, "free");
+    const freeWinner = await drawWinner(freePublic.id, "user_test_admin");
+    assert.equal(freeWinner.isWinner, true);
+
+    const freePrivate = await createWebinar({
+      ...pricingInput,
+      title: "Synthetic Free Private Session",
+      visibility: "private",
+      status: "published",
+      capacity: 1,
+      priceCents: 0,
+    }, "user_test_admin");
+    const freePrivateInvite = await createWebinarInvites(freePrivate.id, ["free.private@example.test"], "user_test_admin");
+    const freePrivateAccess = await verifyPrivateInvite(freePrivate.slug, freePrivateInvite[0].email, freePrivateInvite[0].code);
+    assert.ok(freePrivateAccess);
+    const freePrivateSeat = freePrivate.tiers[0]?.seats.find((seat) => seat.status === "available");
+    assert.ok(freePrivateSeat);
+    const freePrivateHold = await createSeatHold(freePrivate.id, [freePrivateSeat.id], freePrivateAccess.accessToken);
+    process.env.VERCEL_ENV = "production";
+    await completeRegistration({ webinarId: freePrivate.id, holdToken: freePrivateHold.holdToken, name: "Free Private Attendee", email: freePrivateInvite[0].email, phone: "+1 555 010 3302", consent: false, userId: privateCustomer.id, privateAccessToken: freePrivateAccess.accessToken });
+    process.env.VERCEL_ENV = previousVercelEnvironment;
+    const freePrivateRoom = await getPrivateWebinarRoomBySlug(freePrivate.slug, freePrivateAccess.accessToken);
+    assert.equal(freePrivateRoom?.registered, true);
+
+    const { getCrmContact, updateCrmContact } = await import("@/lib/crm");
+    const { getSmsOutbox, getSmsTemplates, normalizeSmsPhone, processDueSms, renderSmsTemplate } = await import("@/lib/sms");
+    const { getEmailOutbox, getEmailSequences, getEmailTemplateRevisions, getEmailTemplates, renderEmailTemplate, updateEmailSequence, updateEmailTemplate } = await import("@/lib/email");
+    assert.equal((await getEmailTemplates()).length, 8);
+    assert.equal((await getEmailSequences()).length, 2);
+    const freeContact = await getCrmContact("crm-contact-667265652e7075626c6963406578616d706c652e74657374");
+    assert.ok(freeContact);
+    assert.equal(freeContact.lifecycleStage, "attendee");
+    assert.equal(freeContact.smsConsent, true);
+    assert.ok(freeContact.activities.some((activity) => activity.activityType === "registration"));
+    const updatedFreeContact = await updateCrmContact(freeContact.id, { name: "Free Public Attendee Updated", lifecycleStage: "attendee", marketingConsent: false, unsubscribed: true }, "user_test_admin");
+    assert.equal(updatedFreeContact.name, "Free Public Attendee Updated");
+    assert.ok(updatedFreeContact.unsubscribedAt);
+    const rendered = renderEmailTemplate({ subject: "Hi {{customer_name}}", htmlBody: "<p>{{customer_name}}</p>", textBody: "Hi {{customer_name}}" }, { customer_name: "A < B" });
+    assert.equal(rendered.subject, "Hi A < B");
+    assert.equal(rendered.htmlBody, "<p>A &lt; B</p>");
+    assert.ok((await getEmailOutbox()).some((item) => item.triggerKey === "registration.created"));
+    const emailPayload = await getDb().query<{ payload_json: string }>("SELECT payload_json FROM email_outbox WHERE trigger_key = 'registration.created' ORDER BY created_at DESC LIMIT 1");
+    assert.equal(JSON.parse(emailPayload.rows[0]?.payload_json ?? "{}").site_name, "Demo Operations Co.");
+    assert.equal((await getSmsTemplates()).length, 3);
+    assert.equal(normalizeSmsPhone("(555) 010-0142"), "+15550100142");
+    assert.equal(renderSmsTemplate("Hi {{customer_name}}", { customer_name: "A < B" }), "Hi A < B");
+    const smsOutbox = await getSmsOutbox();
+    assert.ok(smsOutbox.some((item) => item.triggerKey === "session.starting_soon" && item.status === "queued"));
+    assert.ok(smsOutbox.some((item) => item.triggerKey === "winner.drawn" && item.recipientPhone === "+15550103301"));
+    const previousSmsEnabled = process.env.SMS_ENABLED;
+    const previousSmsProvider = process.env.SMS_PROVIDER;
+    process.env.SMS_ENABLED = "true";
+    process.env.SMS_PROVIDER = "mock";
+    const processedSms = await processDueSms(20);
+    assert.ok(processedSms.sent >= 2);
+    process.env.SMS_ENABLED = previousSmsEnabled;
+    process.env.SMS_PROVIDER = previousSmsProvider;
+    const registrationTemplate = (await getEmailTemplates()).find((template) => template.slug === "registration-confirmed");
+    assert.ok(registrationTemplate);
+    await updateEmailTemplate(registrationTemplate.id, { name: registrationTemplate.name, triggerKey: registrationTemplate.triggerKey, messageType: registrationTemplate.messageType, subject: "Updated: {{webinar_title}}", preheader: registrationTemplate.preheader, htmlBody: registrationTemplate.htmlBody, textBody: registrationTemplate.textBody, status: registrationTemplate.status }, "user_test_admin");
+    const templateRevisions = await getEmailTemplateRevisions(registrationTemplate.id);
+    assert.equal(templateRevisions.length, 1);
+    assert.equal(templateRevisions[0]?.version, 2);
+    const attendeeSequence = (await getEmailSequences()).find((sequence) => sequence.slug === "attendee-journey");
+    assert.ok(attendeeSequence);
+    await updateEmailSequence(attendeeSequence.id, { name: "Attendee journey updated", triggerKey: attendeeSequence.triggerKey, status: "paused" }, "user_test_admin");
+    assert.equal((await getEmailSequences()).find((sequence) => sequence.id === attendeeSequence.id)?.status, "paused");
+
+    const { createProductOrder, getOrderById, getOrders, getProductBySlug, getProducts, updateOrderFulfillment, updateProduct } = await import("@/lib/commerce");
+    const products = await getProducts();
+    assert.equal(products.length, 3);
+    const giveawayWebinar = await createWebinar({
+      ...pricingInput,
+      title: "Synthetic Giveaway Session",
+      description: "A synthetic session used to verify one prize and claim instructions.",
+      status: "published",
+      capacity: 2,
+      giveawayEnabled: true,
+      prizeProductId: products[0]?.id ?? null,
+      claimDeadline: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      fulfillmentNotes: "Winner must confirm the shipping address within seven days.",
+    }, "user_test_admin");
+    assert.equal(giveawayWebinar.giveawayEnabled, true);
+    assert.equal(giveawayWebinar.prizeProductId, products[0]?.id);
+    assert.equal(giveawayWebinar.prizeProductName, products[0]?.name);
+    assert.match(giveawayWebinar.fulfillmentNotes, /shipping address/);
+    const giveawaySeatOne = giveawayWebinar.tiers[0]?.seats[0];
+    const giveawaySeatTwo = giveawayWebinar.tiers[0]?.seats[1];
+    assert.ok(giveawaySeatOne);
+    assert.ok(giveawaySeatTwo);
+    const giveawayHoldOne = await createSeatHold(giveawayWebinar.id, [giveawaySeatOne.id]);
+    const giveawayHoldTwo = await createSeatHold(giveawayWebinar.id, [giveawaySeatTwo.id]);
+    const giveawayRegistrationOne = await completeRegistration({ webinarId: giveawayWebinar.id, holdToken: giveawayHoldOne.holdToken, name: "Giveaway Attendee One", email: "giveaway.one@example.test", phone: "+1 555 010 4401", consent: false, userId: testCustomer.id });
+    const giveawayRegistrationTwo = await completeRegistration({ webinarId: giveawayWebinar.id, holdToken: giveawayHoldTwo.holdToken, name: "Giveaway Attendee Two", email: "giveaway.two@example.test", phone: "+1 555 010 4402", consent: false, userId: testCustomer.id });
+    const giveawayWinner = await drawWinner(giveawayWebinar.id, "user_test_admin");
+    assert.equal(giveawayWinner.giveawayOutcome, "winner");
+    assert.equal(giveawayWinner.giveawayPrizeName, giveawayWebinar.prizeProductName);
+    const giveawayOutcomes = await getDb().query<{ id: string; giveaway_outcome: string; giveaway_prize_name: string; giveaway_claim_deadline: string }>("SELECT id, giveaway_outcome, giveaway_prize_name, giveaway_claim_deadline FROM registrations WHERE webinar_id = $1 ORDER BY id", [giveawayWebinar.id]);
+    assert.equal(giveawayOutcomes.rows.length, 2);
+    assert.equal(giveawayOutcomes.rows.filter((row) => row.giveaway_outcome === "winner").length, 1);
+    assert.equal(giveawayOutcomes.rows.filter((row) => row.giveaway_outcome === "not_winner").length, 1);
+    assert.ok(giveawayOutcomes.rows.every((row) => row.giveaway_prize_name === giveawayWebinar.prizeProductName && row.giveaway_claim_deadline));
+    const giveawayEmails = await getEmailOutbox();
+    assert.ok(giveawayEmails.some((item) => item.entityId === giveawayWinner.id && item.templateName === "Giveaway winner"));
+    const giveawayLoserId = giveawayRegistrationOne.registrationIds[0] === giveawayWinner.id ? giveawayRegistrationTwo.registrationIds[0] : giveawayRegistrationOne.registrationIds[0];
+    assert.ok(giveawayEmails.some((item) => item.entityId === giveawayLoserId && item.templateName === "Giveaway result — not selected"));
+
+    const endedGiveaway = await createWebinar({
+      ...pricingInput,
+      title: "Synthetic Automatic Giveaway",
+      description: "A synthetic session used to verify automatic end-of-stream drawing.",
+      startsAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      status: "published",
+      capacity: 1,
+      giveawayEnabled: true,
+      prizeProductId: products[0]?.id ?? null,
+      claimDeadline: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      fulfillmentNotes: "Synthetic automatic draw fulfillment notes.",
+    }, "user_test_admin");
+    const endedSeat = endedGiveaway.tiers[0]?.seats[0];
+    assert.ok(endedSeat);
+    const endedHold = await createSeatHold(endedGiveaway.id, [endedSeat.id]);
+    await completeRegistration({ webinarId: endedGiveaway.id, holdToken: endedHold.holdToken, name: "Automatic Draw Attendee", email: "automatic.draw@example.test", phone: "+1 555 010 4403", consent: false, userId: testCustomer.id });
+    const lifecycle = await processEndedWebinars();
+    assert.ok(lifecycle.completed >= 1);
+    assert.ok(lifecycle.drawn >= 1);
+    const automaticDraw = await getDb().query<{ drawn_by: string | null; trigger_source: string }>("SELECT drawn_by, trigger_source FROM winner_draws WHERE webinar_id = $1", [endedGiveaway.id]);
+    assert.equal(automaticDraw.rows[0]?.drawn_by, null);
+    assert.equal(automaticDraw.rows[0]?.trigger_source, "stream_ended");
+    assert.equal((await getProducts(false, { query: "workbook", status: "active" })).length, 1);
+    const workbook = await getProductBySlug("field-notebook");
+    assert.ok(workbook);
+    const initialInventory = workbook.inventoryQuantity;
+    const productOrder = await createProductOrder({
+      items: [{ productId: workbook.id, quantity: 2 }],
+      customerName: "Synthetic Product Buyer",
+      customerEmail: "buyer@example.test",
+      customerPhone: "+1 555 010 2200",
+      shippingName: "Synthetic Product Buyer",
+      shippingAddressLine1: "100 Demo Way",
+      shippingCity: "Arlington",
+      shippingRegion: "TX",
+      shippingPostalCode: "76014",
+    });
+    assert.equal(productOrder.items[0]?.quantity, 2);
+    assert.equal(productOrder.paymentStatus, "paid");
+    assert.equal(productOrder.fulfillmentStatus, "unfulfilled");
+    assert.equal(productOrder.totalCents, productOrder.subtotalCents + productOrder.shippingCents);
+    const inventoryAfterOrder = await getProductBySlug("field-notebook");
+    assert.equal(inventoryAfterOrder?.inventoryQuantity, initialInventory - 2);
+    const loadedOrder = await getOrderById(productOrder.id);
+    assert.equal(loadedOrder?.orderNumber, productOrder.orderNumber);
+    assert.equal(loadedOrder?.shippingCity, "Arlington");
+    assert.equal((await getOrders({ query: "Synthetic Product Buyer", paymentStatus: "paid", fulfillmentStatus: "unfulfilled" })).length, 1);
+    const shippedOrder = await updateOrderFulfillment(productOrder.id, "shipped", "Synthetic Carrier", "DEMO-TRACK-001", "user_test_admin");
+    assert.equal(shippedOrder.fulfillmentStatus, "shipped");
+    assert.equal(shippedOrder.trackingCarrier, "Synthetic Carrier");
+    assert.equal(shippedOrder.trackingNumber, "DEMO-TRACK-001");
+    assert.equal((await getOrders({ query: productOrder.orderNumber, fulfillmentStatus: "shipped" })).length, 1);
+    const updatedProduct = await updateProduct(workbook.id, { name: "Field Notes Workbook Updated", sku: workbook.sku, description: "An updated synthetic field workbook for testing product edits.", details: "Updated demo fulfillment details for the sample physical product.", category: workbook.category, priceCents: workbook.priceCents, inventoryQuantity: initialInventory - 2, weightGrams: workbook.weightGrams, status: workbook.status }, "user_test_admin");
+    assert.equal(updatedProduct.slug, workbook.slug);
+    assert.equal(updatedProduct.name, "Field Notes Workbook Updated");
+    const orderContact = await getCrmContact("crm-contact-6275796572406578616d706c652e74657374");
+    assert.ok(orderContact);
+    assert.equal(orderContact.lifecycleStage, "customer");
+    assert.ok(orderContact.activities.some((activity) => activity.activityType === "order"));
+    assert.ok((await getEmailOutbox()).some((item) => item.triggerKey === "order.created"));
+    assert.ok((await getEmailOutbox()).some((item) => item.triggerKey === "order.shipped"));
 
     await getDb().query("UPDATE system_metadata SET value = 'imported' WHERE key = 'dataset_origin'");
     await assert.rejects(

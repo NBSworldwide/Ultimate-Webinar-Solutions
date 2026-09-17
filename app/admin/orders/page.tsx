@@ -1,0 +1,20 @@
+import type { Metadata } from "next";
+import { ClipboardList, Package, Search, Truck } from "lucide-react";
+import { OrderFulfillmentForm } from "@/components/order-fulfillment-form";
+import { getOrders } from "@/lib/commerce";
+import { formatDateTime, formatMoney } from "@/lib/format";
+import type { FulfillmentStatus, ProductPaymentStatus } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Orders", robots: { index: false, follow: false } };
+const paymentStatuses: Array<ProductPaymentStatus | "all"> = ["all", "pending", "paid", "failed", "refunded"];
+const fulfillmentStatuses: Array<FulfillmentStatus | "all"> = ["all", "unfulfilled", "packing", "shipped", "delivered", "cancelled"];
+
+export default async function AdminOrdersPage({ searchParams }: { searchParams: Promise<{ q?: string; payment?: string; fulfillment?: string }> }) {
+  const params = await searchParams;
+  const payment = paymentStatuses.includes(params.payment as ProductPaymentStatus | "all") ? params.payment as ProductPaymentStatus | "all" : "all";
+  const fulfillment = fulfillmentStatuses.includes(params.fulfillment as FulfillmentStatus | "all") ? params.fulfillment as FulfillmentStatus | "all" : "all";
+  const query = params.q?.trim() ?? "";
+  const orders = await getOrders({ query, paymentStatus: payment, fulfillmentStatus: fulfillment });
+  return <div className="content-width"><div className="page-topline"><div><span className="eyebrow">Commerce operations</span><h1 className="page-title">Orders.</h1><p className="page-subtitle">Review paid product orders, prepare packages, and record shipment tracking from one queue.</p></div><span className="button button-secondary"><ClipboardList size={15} /> {orders.length} total</span></div><div className="notice-banner"><Truck size={17} /><span><strong>Fulfillment queue.</strong> Update packing, shipped, and delivered states after your warehouse or carrier confirms each handoff.</span></div><section className="section-spacer"><div className="admin-filter-bar"><form method="get" className="admin-filter-form"><div className="admin-search-field"><Search size={15} /><input name="q" defaultValue={query} placeholder="Search order number or customer" aria-label="Search orders" /></div><select name="payment" defaultValue={payment} aria-label="Filter orders by payment status">{paymentStatuses.map((value) => <option key={value} value={value}>{value === "all" ? "All payments" : value}</option>)}</select><select name="fulfillment" defaultValue={fulfillment} aria-label="Filter orders by fulfillment status">{fulfillmentStatuses.map((value) => <option key={value} value={value}>{value === "all" ? "All fulfillment" : value}</option>)}</select><button className="button button-small" type="submit">Filter</button>{query || payment !== "all" || fulfillment !== "all" ? <a href="/admin/orders" className="panel-link">Clear</a> : null}</form></div>{orders.length > 0 ? <div className="order-admin-list">{orders.map((order) => <article className="panel order-admin-card" key={order.id}><div className="panel-header"><div><span className="eyebrow">{order.orderNumber} · {formatDateTime(order.createdAt)}</span><h2 className="panel-title">{order.customerName}</h2><p className="muted">{order.customerEmail} · {order.shippingCity}, {order.shippingRegion} · {order.shippingPostalCode}</p></div><div className="order-total"><strong>{formatMoney(order.totalCents)}</strong><span>{order.paymentStatus} · {order.fulfillmentStatus}</span></div></div><div className="order-item-lines">{order.items.map((item) => <div key={item.id}><Package size={14} /><span>{item.quantity} × {item.productName}</span><strong>{formatMoney(item.lineTotalCents)}</strong></div>)}</div><OrderFulfillmentForm order={order} /></article>)}</div> : <section className="panel empty-state"><ClipboardList size={20} /><h3>No orders match these filters</h3><a href="/admin/orders" className="panel-link" style={{ marginTop: 12 }}>Clear filters</a></section>}</section></div>;
+}

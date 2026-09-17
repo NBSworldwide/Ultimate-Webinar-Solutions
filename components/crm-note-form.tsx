@@ -1,0 +1,7 @@
+"use client";
+
+import { NotebookPen } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+export function CrmNoteForm({ contactId }: { contactId: string }) { const router = useRouter(); const [body, setBody] = useState(""); const [message, setMessage] = useState(""); const [saving, setSaving] = useState(false); async function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setMessage(""); try { const response = await fetch(`/api/admin/crm/contacts/${encodeURIComponent(contactId)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) }); const data = await response.json() as { error?: string }; if (!response.ok) throw new Error(data.error ?? "The note could not be saved."); setBody(""); setMessage("Note added."); router.refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : "The note could not be saved."); } finally { setSaving(false); } } return <form className="inline-form" onSubmit={submit}><textarea rows={3} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Add an internal note…" required /><div className="form-actions"><button className="button button-small" type="submit" disabled={saving}><NotebookPen size={13} />{saving ? "Saving…" : "Add note"}</button>{message ? <span className={message === "Note added." ? "form-success" : "form-error"}>{message}</span> : null}</div></form>; }
