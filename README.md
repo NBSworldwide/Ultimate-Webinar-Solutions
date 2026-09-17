@@ -15,7 +15,7 @@ pnpm dev
 
 Open <http://localhost:3000>.
 
-Seeded samples never create login accounts or default passwords. To access the local admin, set `INITIAL_ADMIN_EMAIL` and a strong `INITIAL_ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:create-admin`.
+Seeded samples never create login accounts or default passwords. To access the local admin, set `INITIAL_ADMIN_EMAIL` and a strong `INITIAL_ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:create-admin`. For role testing, set unique `DEMO_ADMIN_PASSWORD`, `DEMO_MANAGER_PASSWORD`, and `DEMO_CUSTOMER_PASSWORD` values of at least 20 characters plus `DEMO_USER_SEED_CONFIRMATION=local-only-demo-users` in the local environment, then run `pnpm db:seed-users`. That command creates or resets only the three reserved `.test` identities, requires explicit non-production `DEMO_MODE=true`, verifies the database is marked as the standalone dataset, records synthetic audit events, and never prints or stores passwords in plaintext.
 
 The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection string before running the migration or seed commands. Neon is used by the deployed Vercel app; a separate Neon branch or local PostgreSQL database is recommended for development. Migrations are explicit and safe to rerun. `pnpm db:seed` creates only synthetic webinar, ticket, seat, registration, and product samples; it refuses to seed over unmarked application data. No payment gateway, carrier, email provider, SMS provider, or webinar provider is contacted by the demo. `INTEGRATION_ENCRYPTION_KEY` should be a unique random secret of at least 32 characters in any environment where provider credentials will be saved; the application falls back to `SESSION_SECRET` only for development compatibility.
 

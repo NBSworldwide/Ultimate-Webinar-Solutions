@@ -42,7 +42,7 @@ test("Google Maps blocks accept addresses and range-checked coordinates", async 
 });
 
 test("standalone webinar domain keeps inventory, registrations, and attendee access consistent", async () => {
-  Object.assign(process.env, { NODE_ENV: "test", DEMO_MODE: "true" });
+  Object.assign(process.env, { NODE_ENV: "test", DEMO_MODE: "true", DEMO_USER_SEED_CONFIRMATION: "local-only-demo-users" });
   const postgres = new PGlite();
 
   const query = async <Row extends DatabaseRow>(sql: string, values: unknown[] = []): Promise<QueryResult<Row>> => {
@@ -65,6 +65,32 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const seeded = await seedSyntheticSamples();
     assert.deepEqual(seeded, { webinars: 3, registrations: 5, alreadySeeded: false });
     assert.deepEqual(await seedSyntheticSamples(), { webinars: 3, registrations: 5, alreadySeeded: true });
+
+    const { seedDemoUsers } = await import("@/lib/demo-users");
+    const demoUsers = await seedDemoUsers({
+      admin: "synthetic-demo-admin-password-2026",
+      manager: "synthetic-demo-manager-password-2026",
+      customer: "synthetic-demo-customer-password-2026",
+    });
+    assert.deepEqual(demoUsers.users.map(({ role, action }) => ({ role, action })), [
+      { role: "admin", action: "created" },
+      { role: "manager", action: "created" },
+      { role: "attendee", action: "created" },
+    ]);
+    assert.equal(demoUsers.created, 3);
+    assert.equal(demoUsers.reset, 0);
+    const demoUsersAgain = await seedDemoUsers({
+      admin: "synthetic-demo-admin-password-2026",
+      manager: "synthetic-demo-manager-password-2026",
+      customer: "synthetic-demo-customer-password-2026",
+    });
+    assert.equal(demoUsersAgain.created, 0);
+    assert.equal(demoUsersAgain.reset, 3);
+    const { authenticate } = await import("@/lib/auth");
+    assert.equal((await authenticate("admin.demo@webinar-studio.test", "synthetic-demo-admin-password-2026"))?.role, "admin");
+    assert.equal((await authenticate("manager.demo@webinar-studio.test", "synthetic-demo-manager-password-2026"))?.role, "manager");
+    assert.equal((await authenticate("customer.demo@webinar-studio.test", "synthetic-demo-customer-password-2026"))?.role, "attendee");
+    assert.equal(await authenticate("admin.demo@webinar-studio.test", "wrong-password"), null);
 
     await getDb().query(
       "INSERT INTO users (id, email, name, role, password_hash, created_at) VALUES ($1, $2, $3, 'admin', $4, NOW()::text)",

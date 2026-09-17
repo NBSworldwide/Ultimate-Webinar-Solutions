@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "test": "tsx --test tests/domain.test.ts",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed-users": "tsx scripts/seed-demo-users.ts",
     "db:create-admin": "tsx scripts/create-admin.ts",
     "readiness:agentic": "node scripts/agentic-readiness.mjs",
     "lighthouse": "lighthouse"
