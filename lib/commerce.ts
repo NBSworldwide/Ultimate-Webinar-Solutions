@@ -60,7 +60,7 @@ function toProduct(row: ProductRow): ProductListItem & { details: string } {
 
 const productFields = "id, slug, name, sku, description, details, category, image_url, price_cents, compare_at_price_cents, sale_price_cents, sale_starts_at, sale_ends_at, inventory_quantity, weight_grams, status";
 
-export async function getProducts(activeOnly = true, filters?: { query?: string; status?: ProductStatus | "all" }): Promise<Array<ProductListItem & { details: string }>> {
+export async function getProducts(activeOnly = true, filters?: { query?: string; status?: ProductStatus | "all"; category?: string }): Promise<Array<ProductListItem & { details: string }>> {
   await assertStandaloneDataset();
   const values: unknown[] = [];
   const conditions = activeOnly ? ["status = 'active'"] : [];
@@ -72,6 +72,11 @@ export async function getProducts(activeOnly = true, filters?: { query?: string;
   if (!activeOnly && filters?.status && filters.status !== "all") {
     values.push(filters.status);
     conditions.push(`status = $${values.length}`);
+  }
+  const category = filters?.category?.trim();
+  if (category) {
+    values.push(category);
+    conditions.push(`category = $${values.length}`);
   }
   const filter = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const { rows } = await getDb().query<ProductRow>(`SELECT ${productFields} FROM products ${filter} ORDER BY category ASC, name ASC`, values);

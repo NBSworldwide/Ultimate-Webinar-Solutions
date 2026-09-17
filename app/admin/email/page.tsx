@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Clock3, Mail, ShieldCheck, Workflow } from "lucide-react";
 import { EmailSequenceForm } from "@/components/email-sequence-form";
 import { EmailSequenceEditForm } from "@/components/email-sequence-edit-form";
@@ -6,11 +7,14 @@ import { EmailTemplateEditForm } from "@/components/email-template-edit-form";
 import { EmailTemplateForm } from "@/components/email-template-form";
 import { getEmailOutbox, getEmailSequences, getEmailTemplateRevisions, getEmailTemplates } from "@/lib/email";
 import { formatDateTime } from "@/lib/format";
+import { getCurrentUser, hasCapability } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Email correspondence" };
 
 export default async function EmailAdminPage() {
+  const user = await getCurrentUser();
+  if (!hasCapability(user, "email.manage")) redirect("/admin");
   const [templates, sequences, outbox] = await Promise.all([
     getEmailTemplates(),
     getEmailSequences(),

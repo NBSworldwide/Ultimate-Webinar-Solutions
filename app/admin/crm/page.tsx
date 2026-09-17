@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ContactRound, Search, ShieldCheck, Tags } from "lucide-react";
 import { CrmContactEditForm } from "@/components/crm-contact-edit-form";
 import { CrmContactForm } from "@/components/crm-contact-form";
@@ -6,11 +7,14 @@ import { CrmNoteForm } from "@/components/crm-note-form";
 import { CrmTagForm } from "@/components/crm-tag-form";
 import { getCrmContacts, getCrmTags } from "@/lib/crm";
 import { formatDateTime } from "@/lib/format";
+import { getCurrentUser, hasCapability } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "CRM" };
 
 export default async function CrmPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const user = await getCurrentUser();
+  if (!hasCapability(user, "crm.manage")) redirect("/admin");
   const query = ((await searchParams).q ?? "").trim();
   const [contacts, tags] = await Promise.all([getCrmContacts(query), getCrmTags()]);
 

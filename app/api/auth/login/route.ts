@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticate, createSession, safeReturnPath, SESSION_COOKIE } from "@/lib/auth";
+import { hasCapability } from "@/lib/authorization";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
 import { clientKey, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     const user = await authenticate(body.email, body.password);
     if (!user) return NextResponse.json({ error: "Those credentials were not recognized." }, { status: 401 });
     const token = await createSession(user.id);
-    const response = NextResponse.json({ redirectTo: safeReturnPath(body.returnTo, user.role === "admin" ? "/admin" : "/account") });
+    const response = NextResponse.json({ redirectTo: safeReturnPath(body.returnTo, hasCapability(user, "admin.access") ? "/admin" : "/account") });
     response.cookies.set({ name: SESSION_COOKIE, value: token, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 14 });
     return response;
   } catch (error) {

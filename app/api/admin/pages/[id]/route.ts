@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { hasCapability } from "@/lib/authorization";
 import { deletePage, getPageById, updatePage } from "@/lib/pages";
 import { DomainError } from "@/lib/errors";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
@@ -18,7 +19,7 @@ const pageSchema = z.object({
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
+  if (!user || !hasCapability(user, "content.manage")) return NextResponse.json({ error: user ? "You do not have permission for this area." : "Sign in to continue." }, { status: user ? 403 : 401 });
   try {
     assertSameOrigin(request);
     const page = await updatePage((await params).id, pageSchema.parse(await request.json()), user.id);
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
+  if (!user || !hasCapability(user, "content.manage")) return NextResponse.json({ error: user ? "You do not have permission for this area." : "Sign in to continue." }, { status: user ? 403 : 401 });
   try {
     assertSameOrigin(request);
     const id = (await params).id;

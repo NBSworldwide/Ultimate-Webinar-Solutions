@@ -1,8 +1,8 @@
 import type { ThemeSettingsValues } from "@/lib/theme-presets";
 
-export type Role = "admin" | "attendee";
+export type Role = "admin" | "manager" | "attendee";
 export type PageStatus = "draft" | "published" | "archived";
-export type PageBlockType = "hero" | "rich_text" | "image" | "cta" | "spacer" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid";
+export type PageBlockType = "hero" | "rich_text" | "image" | "image_box" | "icon_box" | "button" | "cta" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid" | "navigation_menu" | "html" | "map" | "spacer" | "container";
 export type WebinarStatus = "draft" | "published" | "sold_out" | "completed";
 export type WebinarVisibility = "public" | "private";
 export type { EmailProvider, StreamingProvider } from "@/lib/integration-catalog";
@@ -90,6 +90,89 @@ export interface PageBlock {
   id: string;
   type: PageBlockType;
   data: Record<string, string | number>;
+  style?: PageBlockStyle;
+  layout?: PageBlockLayout;
+  children?: PageBlock[];
+}
+
+export type PageContainerMode = "flex" | "grid";
+export type PageContainerContentWidth = "boxed" | "full";
+export type PageContainerDirection = "row" | "column" | "row-reverse" | "column-reverse";
+export type PageContainerJustify = "start" | "center" | "end" | "space-between" | "space-around" | "space-evenly";
+export type PageContainerAlign = "start" | "center" | "end" | "stretch";
+export type PageContainerWrap = "nowrap" | "wrap";
+
+export interface PageBlockLayout {
+  mode?: PageContainerMode;
+  contentWidth?: PageContainerContentWidth;
+  width?: number;
+  minHeight?: number;
+  direction?: PageContainerDirection;
+  justifyContent?: PageContainerJustify;
+  alignItems?: PageContainerAlign;
+  columnGap?: number;
+  rowGap?: number;
+  wrap?: PageContainerWrap;
+  columns?: number;
+  rows?: number;
+  autoFlow?: "row" | "column";
+  justifyItems?: PageContainerAlign;
+  gridOutline?: boolean;
+}
+
+export type PageStyleDevice = "widescreen" | "desktop" | "laptop" | "tabletLandscape" | "tabletPortrait" | "mobileLandscape" | "mobilePortrait";
+export type PageStyleNumber = Partial<Record<PageStyleDevice, number>>;
+export interface PageStyleEdges { top?: number; right?: number; bottom?: number; left?: number; }
+export type PageStyleBox = Partial<Record<PageStyleDevice, PageStyleEdges>>;
+export type PageStyleBorderType = "default" | "none" | "solid" | "double" | "dotted" | "dashed" | "groove";
+export type PageStyleBackgroundMode = "none" | "classic" | "gradient";
+export type PageStyleGradientType = "linear" | "radial";
+
+export interface PageBlockStyle {
+  widthMode?: "default" | "full" | "inline" | "custom";
+  width?: PageStyleNumber;
+  maxWidth?: PageStyleNumber;
+  height?: PageStyleNumber;
+  opacity?: PageStyleNumber;
+  alignSelf?: "default" | "start" | "center" | "end" | "stretch";
+  position?: "default" | "relative" | "absolute" | "fixed";
+  zIndex?: number;
+  margin?: PageStyleBox;
+  padding?: PageStyleBox;
+  typography?: {
+    fontFamily?: "default" | "Manrope" | "DM Mono" | "Inter" | "Arial" | "Georgia" | "Verdana";
+    fontSize?: PageStyleNumber;
+    fontWeight?: number;
+    textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+    fontStyle?: "normal" | "italic" | "oblique";
+    textDecoration?: "none" | "underline" | "overline" | "line-through";
+    lineHeight?: PageStyleNumber;
+    letterSpacing?: PageStyleNumber;
+    wordSpacing?: PageStyleNumber;
+    textAlign?: "left" | "center" | "right" | "justify";
+  };
+  background?: {
+    mode?: PageStyleBackgroundMode;
+    color?: string;
+    image?: string;
+    imageSize?: "auto" | "cover" | "contain";
+    imagePosition?: "center" | "top" | "right" | "bottom" | "left";
+    imageRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+    gradientType?: PageStyleGradientType;
+    gradientStart?: string;
+    gradientEnd?: string;
+    gradientStartLocation?: number;
+    gradientEndLocation?: number;
+    angle?: PageStyleNumber;
+  };
+  hover?: { textColor?: string; backgroundColor?: string; opacity?: number; };
+  border?: {
+    type?: PageStyleBorderType;
+    color?: string;
+    width?: PageStyleBox;
+    radius?: PageStyleBox;
+    shadow?: { color?: string; horizontal?: number; vertical?: number; blur?: number; spread?: number; position?: "outline" | "inset"; };
+  };
 }
 
 export interface ContentPage {

@@ -2,7 +2,10 @@ import { cookies } from "next/headers";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { assertStandaloneDataset, getDb } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import type { User } from "@/lib/types";
+import type { Role, User } from "@/lib/types";
+
+export { hasCapability, isStaff, roleLabel } from "@/lib/authorization";
+export type { Capability } from "@/lib/authorization";
 
 export const SESSION_COOKIE = "webinar_session";
 const SESSION_DAYS = 14;
@@ -30,7 +33,7 @@ function hashToken(value: string): string {
   return createHmac("sha256", secret ?? "local-development-session-secret").update(value).digest("hex");
 }
 
-function toUser(row: { id: string; email: string; name: string; role: "admin" | "attendee" }): User {
+function toUser(row: { id: string; email: string; name: string; role: Role }): User {
   return { id: row.id, email: row.email, name: row.name, role: row.role };
 }
 
@@ -62,7 +65,7 @@ export async function authenticate(email: string, password: string): Promise<Use
     id: string;
     email: string;
     name: string;
-    role: "admin" | "attendee";
+    role: Role;
     password_hash: string;
   }>("SELECT id, email, name, role, password_hash FROM users WHERE lower(email) = lower($1)", [email]);
   const row = rows[0];
@@ -91,7 +94,7 @@ export async function getCurrentUser(): Promise<User | null> {
     id: string;
     email: string;
     name: string;
-    role: "admin" | "attendee";
+    role: Role;
     expires_at: string;
   }>(`
     SELECT u.id, u.email, u.name, u.role, s.expires_at

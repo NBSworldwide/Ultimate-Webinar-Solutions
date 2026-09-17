@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { hasCapability } from "@/lib/authorization";
 import { DomainError, updateOrderFulfillment } from "@/lib/commerce";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
 
@@ -13,7 +14,7 @@ const updateSchema = z.object({
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
+  if (!user || !hasCapability(user, "orders.manage")) return NextResponse.json({ error: user ? "You do not have permission for this area." : "Sign in to continue." }, { status: user ? 403 : 401 });
   try {
     assertSameOrigin(request);
     const body = updateSchema.parse(await request.json());

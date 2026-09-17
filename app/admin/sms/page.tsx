@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Clock3, MessageSquareText, ShieldCheck } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { getSmsOperationalState, getSmsOutbox, getSmsTemplates } from "@/lib/sms";
+import { getCurrentUser, hasCapability } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "SMS notifications" };
@@ -13,6 +15,8 @@ function statusClass(status: string): string {
 }
 
 export default async function SmsAdminPage() {
+  const user = await getCurrentUser();
+  if (!hasCapability(user, "messaging.manage")) redirect("/admin");
   const [templates, outbox] = await Promise.all([getSmsTemplates(), getSmsOutbox()]);
   const state = getSmsOperationalState();
   return <div className="content-width">

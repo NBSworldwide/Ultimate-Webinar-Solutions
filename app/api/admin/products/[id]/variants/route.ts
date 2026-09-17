@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { hasCapability } from "@/lib/authorization";
 import { createProductVariant, getProductVariants, updateProductVariant } from "@/lib/catalog";
 import { DomainError } from "@/lib/errors";
 import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
@@ -14,13 +15,13 @@ const variantSchema = z.object({
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
+  if (!user || !hasCapability(user, "catalog.manage")) return NextResponse.json({ error: user ? "You do not have permission for this area." : "Sign in to continue." }, { status: user ? 403 : 401 });
   try { return NextResponse.json({ variants: await getProductVariants((await params).id) }); } catch { return NextResponse.json({ error: "Variants could not be loaded." }, { status: 500 }); }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") return NextResponse.json({ error: "Admin access is required." }, { status: 401 });
+  if (!user || !hasCapability(user, "catalog.manage")) return NextResponse.json({ error: user ? "You do not have permission for this area." : "Sign in to continue." }, { status: user ? 403 : 401 });
   try {
     assertSameOrigin(request);
     const productId = (await params).id;

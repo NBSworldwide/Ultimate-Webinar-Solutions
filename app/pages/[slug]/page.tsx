@@ -6,6 +6,7 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { getPublishedPageBySlug } from "@/lib/pages";
 import { getProducts } from "@/lib/commerce";
+import { getNavigationMenus } from "@/lib/navigation";
 import { buildContentPageGraph } from "@/lib/seo";
 import { getSiteSettings } from "@/lib/site-settings";
 import { getApprovedTestimonials } from "@/lib/testimonials";
@@ -21,6 +22,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function ContentPageRoute({ params }: { params: Promise<{ slug: string }> }) {
   const page = await getPublishedPageBySlug((await params).slug);
   if (!page) notFound();
-  const [settings, products, testimonials] = await Promise.all([getSiteSettings(), getProducts(), getApprovedTestimonials()]);
-  return <div className="public-shell"><EntityGraph data={buildContentPageGraph(page, settings)} /><PublicHeader /><main className="public-main content-page-main" id="main-content"><PageRenderer blocks={page.blocks} products={products} testimonials={testimonials} /></main><PublicFooter /></div>;
+  const [settings, products, testimonials, navigationMenus] = await Promise.all([getSiteSettings(), getProducts(), getApprovedTestimonials(), getNavigationMenus()]);
+  return <div className="public-shell"><EntityGraph data={buildContentPageGraph(page, settings)} /><PublicHeader /><main className="public-main content-page-main" id="main-content"><PageRenderer blocks={page.blocks} products={products} testimonials={testimonials} navigationMenus={navigationMenus} /></main><PublicFooter /></div>;
 }

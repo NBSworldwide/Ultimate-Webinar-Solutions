@@ -2,6 +2,44 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import type { DatabaseClient, DatabasePool, DatabaseRow, QueryResult } from "@/lib/db";
+import { hasCapability } from "@/lib/authorization";
+
+test("page-builder HTML is sanitized while useful formatting and media remain", async () => {
+  const { sanitizeHtml } = await import("@/lib/sanitize-html");
+  const sanitized = sanitizeHtml('<p onclick="alert(1)"><u>Safe copy</u><img src="https://images.example.test/demo.jpg" alt="Demo" /></p><script>alert(2)</script><iframe src="https://evil.example.test/embed"></iframe>');
+  assert.match(sanitized, /<p><u>Safe copy<\/u><img src="https:\/\/images\.example\.test\/demo\.jpg" alt="Demo" \/><\/p>/);
+  assert.doesNotMatch(sanitized, /onclick|script|evil\.example/);
+});
+
+test("role capabilities keep administrator, manager, and customer boundaries distinct", () => {
+  const admin = { role: "admin" as const };
+  const manager = { role: "manager" as const };
+  const customer = { role: "attendee" as const };
+
+  assert.equal(hasCapability(admin, "settings.manage"), true);
+  assert.equal(hasCapability(admin, "team.manage"), true);
+  assert.equal(hasCapability(manager, "content.manage"), true);
+  assert.equal(hasCapability(manager, "webinars.manage"), true);
+  assert.equal(hasCapability(manager, "catalog.manage"), true);
+  assert.equal(hasCapability(manager, "orders.manage"), true);
+  assert.equal(hasCapability(manager, "email.manage"), true);
+  assert.equal(hasCapability(manager, "appearance.manage"), true);
+  assert.equal(hasCapability(manager, "settings.manage"), false);
+  assert.equal(hasCapability(manager, "team.manage"), false);
+  assert.equal(hasCapability(customer, "admin.access"), false);
+  assert.equal(hasCapability(customer, "orders.manage"), false);
+});
+
+test("Google Maps blocks accept addresses and range-checked coordinates", async () => {
+  const { hasMapCoordinateInput, normalizeMapLocation } = await import("@/lib/map-location");
+  const address = normalizeMapLocation({ locationMode: "address", address: " 123 Main Street, Arlington, TX 76014 ", zoom: 10 });
+  assert.deepEqual(address, { mode: "address", query: "123 Main Street, Arlington, TX 76014", label: "123 Main Street, Arlington, TX 76014" });
+
+  const coordinates = { locationMode: "coordinates", latitude: "32.7357", longitude: "-97.1081" };
+  assert.equal(hasMapCoordinateInput(coordinates), true);
+  assert.deepEqual(normalizeMapLocation(coordinates), { mode: "coordinates", query: "32.7357,-97.1081", label: "32.7357,-97.1081", latitude: 32.7357, longitude: -97.1081 });
+  assert.equal(normalizeMapLocation({ locationMode: "coordinates", latitude: "91", longitude: "-97.1081" }), null);
+});
 
 test("standalone webinar domain keeps inventory, registrations, and attendee access consistent", async () => {
   Object.assign(process.env, { NODE_ENV: "test", DEMO_MODE: "true" });
@@ -40,6 +78,14 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const testCustomer = await createAttendeeAccount({ name: "Synthetic Checkout Customer", email: "checkout.customer@example.test", password: "synthetic-test-password" });
     const privateCustomer = await createAttendeeAccount({ name: "Synthetic Private Customer", email: "free.private@example.test", password: "synthetic-private-password" });
     assert.equal(testCustomer.role, "attendee");
+    const { createManagerAccount, getTeamUsers, updateTeamUserRole, TeamAccountError } = await import("@/lib/team");
+    const managerUser = await createManagerAccount({ name: "Synthetic Manager", email: "manager@example.test", password: "synthetic-manager-password" }, "user_test_admin");
+    assert.equal(managerUser.role, "manager");
+    assert.equal((await getTeamUsers()).some((user) => user.id === managerUser.id && user.role === "manager"), true);
+    await updateTeamUserRole(managerUser.id, "attendee", "user_test_admin");
+    assert.equal((await getTeamUsers()).find((user) => user.id === managerUser.id)?.role, "attendee");
+    await updateTeamUserRole(managerUser.id, "manager", "user_test_admin");
+    await assert.rejects(updateTeamUserRole("user_test_admin", "manager", "user_test_admin"), (error: unknown) => error instanceof TeamAccountError && /own role/.test(error.message));
     const { getSiteSettings, updateSiteSettings } = await import("@/lib/site-settings");
     const defaultSiteSettings = await getSiteSettings();
     assert.equal(defaultSiteSettings.displayName, "Webinar Studio");
@@ -72,9 +118,15 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     process.env.INTEGRATION_ENCRYPTION_KEY = previousIntegrationKey;
     process.env.SESSION_SECRET = previousSessionSecret;
     const { createPage, deletePage, getPages, getPublishedPageBySlug, updatePage } = await import("@/lib/pages");
+    const { createNavigationMenu, getNavigationMenu, getNavigationMenus, updateNavigationMenu } = await import("@/lib/navigation");
     const samplePages = await getPages({ status: "published" });
     assert.equal(samplePages.length, 2);
     assert.equal((await getPublishedPageBySlug("about-webinar-studio"))?.title, "About Webinar Studio");
+    const primaryMenu = (await getNavigationMenus()).find((menu) => menu.slug === "primary-navigation");
+    assert.ok(primaryMenu);
+    assert.equal(primaryMenu.autoAddPublishedPages, true);
+    assert.deepEqual(primaryMenu.locations.sort(), ["header", "mobile"]);
+    assert.ok(primaryMenu.items.some((item) => item.itemType === "page" && item.entityId === "page-demo-about" && item.isVisible));
     const editablePage = await createPage({
       slug: "editor-lifecycle-check", title: "Editor lifecycle check", excerpt: "A synthetic page used to verify the visual editor lifecycle.", status: "draft",
       blocks: [{ type: "hero", data: { heading: "Draft content", body: "This content is synthetic." } }], seoTitle: "", seoDescription: "",
@@ -86,10 +138,27 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     }, "user_test_admin");
     assert.equal(publishedPage.status, "published");
     assert.equal((await getPublishedPageBySlug(editablePage.slug))?.blocks.length, 2);
+    const publishedMenu = await getNavigationMenu(primaryMenu.id);
+    assert.ok(publishedMenu?.items.some((item) => item.itemType === "page" && item.entityId === editablePage.id && item.href === `/pages/${editablePage.slug}` && item.isVisible));
     const archivedPage = await updatePage(editablePage.id, { slug: editablePage.slug, title: editablePage.title, excerpt: editablePage.excerpt, status: "archived", blocks: publishedPage.blocks, seoTitle: publishedPage.seoTitle, seoDescription: publishedPage.seoDescription }, "user_test_admin");
     assert.equal(archivedPage.status, "archived");
+    const archivedMenu = await getNavigationMenu(primaryMenu.id);
+    assert.equal(archivedMenu?.items.find((item) => item.itemType === "page" && item.entityId === editablePage.id)?.isVisible, false);
     await deletePage(editablePage.id, "user_test_admin");
     assert.equal((await getPages({ query: "editor-lifecycle-check" })).some((item) => item.id === editablePage.id), false);
+    assert.equal((await getNavigationMenu(primaryMenu.id))?.items.some((item) => item.itemType === "page" && item.entityId === editablePage.id), false);
+    const customMenu = await createNavigationMenu({ name: "Synthetic campaign menu", locations: ["footer"], autoAddPublishedPages: false }, "user_test_admin");
+    const nestedMenu = await updateNavigationMenu(customMenu.id, {
+      name: customMenu.name,
+      locations: customMenu.locations,
+      autoAddPublishedPages: customMenu.autoAddPublishedPages,
+      items: [
+        { id: "navigation-test-parent", label: "Resources", href: "/pages/about-webinar-studio", itemType: "custom", entityId: null },
+        { id: "navigation-test-child", parentId: "navigation-test-parent", label: "Catalog", href: "/products", itemType: "system", entityId: "shop" },
+      ],
+    }, "user_test_admin");
+    assert.equal(nestedMenu.items.find((item) => item.id === "navigation-test-child")?.parentId, "navigation-test-parent");
+    await assert.rejects(updateNavigationMenu(customMenu.id, { name: customMenu.name, locations: customMenu.locations, autoAddPublishedPages: false, items: [{ id: "unsafe", label: "Unsafe", href: "javascript:alert(1)", itemType: "custom", entityId: null }] }, "user_test_admin"), /safe internal path/);
     await getDb().query("UPDATE registrations SET user_id = 'user_test_attendee' WHERE id = 'registration-demo-1'");
     const { enforceRateLimit, RateLimitError } = await import("@/lib/rate-limit");
     await enforceRateLimit("test-login", "192.0.2.10", 2, 60_000);

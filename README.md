@@ -28,12 +28,15 @@ The `.env.local` file must contain `DATABASE_URL` as a PostgreSQL connection str
 - Atomic, server-side seat holds with a five-minute expiry; customer accounts are required before a seat is removed from inventory.
 - Explicit seat states: available, held, sold.
 - Registration records tied to webinar, tier, seat, and registration group.
-- Admin session authentication with HTTP-only cookies.
+- Role-based session authentication with HTTP-only cookies: administrators have full control, managers operate content, commerce, automated email, and visual appearance, and customers stay on public-facing account flows.
+- Administrator-only Team & Access management for creating manager accounts, promoting existing customers, and auditing role changes; the last administrator cannot be demoted.
 - Admin dashboard, webinar management, seat map, registration table, winner draw, planning calculator, and playbook templates.
 - WordPress-familiar admin shell with grouped navigation, Add New shortcuts, edit screens, explicit draft/published states, inline product editing, and email template revision history.
 - Editable site and company profile with display/legal name, tagline, logo URL, contact details, address, operating details, policy links, and social links reused by public chrome, metadata, JSON-LD, and correspondence payloads.
 - Optional site-wide 18+ visitor gate managed from the company profile; it stores a 30-day browser acknowledgement and excludes login, admin, API, and framework routes.
 - WordPress-familiar visual page management with reusable hero, text, image, call-to-action, and spacer blocks; drag-and-drop ordering; live preview; revision history; draft/published/archived states; and guarded permanent deletion.
+- Native Navigation management with reusable header, footer, and mobile menus; sortable and nested links; page, product, category, session, and safe custom-link candidates; automatic published-page additions; and a page-builder Navigation menu block with horizontal or stacked presentation.
+- Rich-text and HTML page blocks with image insertion, underline, color, size, alignment, and approved media embeds; stored markup is sanitized so scripts, forms, event handlers, and unsafe URLs are removed.
 - Public webinar catalog, session detail pages, account-gated registration, five-second seat availability refresh, and attendee account portal.
 - Standalone physical-product catalog with SKUs, inventory, shipping checkout, order records, and admin fulfillment/tracking states.
 - Three synthetic virtual-first service-location pages with local landing-page content and internal links.
@@ -68,7 +71,7 @@ The deployed release is a synthetic-data demo and intentionally does not process
 2. A carrier/shipping adapter, package labels, tax calculation, returns, and queue workers for fulfillment and provider synchronization.
 3. Activate the selected live-stream and email provider adapters with retries, redacted logs, webhook verification, and idempotency. The admin chooser and encrypted credential store are ready; provider calls remain disabled until the adapters, sender/domain verification, stream lifecycle callbacks, and replay access controls are completed. The SMS outbox, mock provider, Twilio adapter boundary, and worker are implemented; add the provider credentials, sender registration, consent review, and callback verification before enabling real SMS. The protected webinar lifecycle worker marks scheduled sessions complete and triggers an automatic drawing; connect the selected stream provider's verified end-of-stream event to the same domain boundary for early or provider-confirmed endings.
 4. Password-reset and account-recovery flows.
-5. Shared edge/Redis rate limiting, expanded CSRF/risk controls for browser mutations, and a full permission matrix.
+5. Shared edge/Redis rate limiting and expanded CSRF/risk controls for browser mutations. The initial administrator/manager/customer permission matrix is implemented; expand it only when additional staff roles are introduced.
 6. Persistent template, scheduling, and backup-webinar administration.
 7. Expanded integration, concurrency, accessibility, and Playwright end-to-end tests.
 
