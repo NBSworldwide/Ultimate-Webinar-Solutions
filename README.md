@@ -92,6 +92,8 @@ SMS is disabled unless `SMS_ENABLED=true`. Local development uses `SMS_PROVIDER=
 
 The Lighthouse CLI is pinned in `package.json` for repeatable local release checks. For a complete report, use both `--output=html` and `--output=json`; reports should be written to a local artifact directory and kept out of Git.
 
+Vercel deployments run the idempotent database migration runner before the Next.js build so a newly connected production database receives the standalone schema before pages are prerendered. The runner uses a transaction and an exclusive migration lock; it never imports the archived WordPress database.
+
 ## Web MCP
 
 The repository includes `.mcp.json` for the Next.js DevTools MCP server. Start the app with `pnpm dev`, then let an MCP-capable development client discover the local Next.js server. See [`docs/web-mcp.md`](docs/web-mcp.md) for the boundary between local runtime inspection, authoritative web research, and future audited provider integrations.
