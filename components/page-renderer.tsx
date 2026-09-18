@@ -20,7 +20,7 @@ import { formatMoney } from "@/lib/format";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { safeLinkAttributes } from "@/lib/link-attributes";
 import { serviceLocations, type ServiceLocation } from "@/content/locations";
-import type { FormDefinition, PageBlock, ProductListItem, TestimonialView } from "@/lib/types";
+import type { FormDefinition, PageBlock, ProductListItem, SiteTemplateKind, TestimonialView } from "@/lib/types";
 
 function text(value: string | number | undefined): string { return typeof value === "string" ? value : ""; }
 
@@ -231,10 +231,11 @@ function backgroundLayerForBlock(block: PageBlock): ReactNode | null {
   return null;
 }
 
-function NavigationBlock({ block, navigationMenus, isAuthenticated }: { block: PageBlock; navigationMenus: NavigationMenuView[]; isAuthenticated: boolean }) {
+function NavigationBlock({ block, navigationMenus, isAuthenticated, templateKind }: { block: PageBlock; navigationMenus: NavigationMenuView[]; isAuthenticated: boolean; templateKind?: SiteTemplateKind }) {
   const menu = navigationMenus.find((candidate) => candidate.id === text(block.data.menuId));
   const items = menu?.items.filter((item) => item.isVisible) ?? [];
   const layout = text(block.data.layout) === "stacked" ? "content-block-menu-stacked" : "content-block-menu-horizontal";
+  if (templateKind) return <PublicNavigation items={items} ariaLabel={menu?.name || (templateKind === "header" ? "Primary navigation" : "Footer navigation")} className={`${layout} content-block-template-navigation`} isAuthenticated={isAuthenticated} />;
   return <section className="content-block content-block-navigation" {...styledProps(block)}><div className="content-block-section-heading"><div><span className="eyebrow">Navigation</span><h2>{text(block.data.heading) || menu?.name || "Explore more"}</h2></div>{menu ? <span className="row-meta">{menu.name}</span> : null}</div>{menu && items.length > 0 ? <PublicNavigation items={items} ariaLabel={menu.name} className={layout} isAuthenticated={isAuthenticated} /> : <p className="muted">Choose a saved menu in the block settings.</p>}</section>;
 }
 
@@ -359,19 +360,19 @@ function LocationDetailBlock({ block, locations }: { block: PageBlock; locations
   return <section className="content-block content-block-location-detail" {...styledProps(block)}><LocationDetailTemplate location={location} otherLocations={locations.filter((candidate) => candidate.slug !== location.slug)} /></section>;
 }
 
-function ContainerBlock({ block, products, testimonials, navigationMenus, forms, filterCategory, productPage, locations, editorMode, isAuthenticated, depth }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; filterCategory: string; productPage: number; locations: ServiceLocation[]; editorMode: boolean; isAuthenticated: boolean; depth: number }) {
+function ContainerBlock({ block, products, testimonials, navigationMenus, forms, filterCategory, productPage, locations, editorMode, isAuthenticated, depth, templateKind }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; filterCategory: string; productPage: number; locations: ServiceLocation[]; editorMode: boolean; isAuthenticated: boolean; depth: number; templateKind?: SiteTemplateKind }) {
   const css = { ...pageBlockStyleToCss(block.style), ...pageBlockLayoutToCss(block.layout) };
   const props = styledProps(block, css as CSSProperties);
   const tag = new Set(["div", "header", "footer", "main", "article", "section", "aside", "nav", "a"]).has(text(block.layout?.htmlTag)) ? text(block.layout?.htmlTag) : "section";
   const linkProps = tag === "a" && text(block.layout?.linkUrl) ? { href: safeHref(text(block.layout?.linkUrl)), target: text(block.layout?.linkTarget) === "new" ? "_blank" : undefined, rel: text(block.layout?.linkTarget) === "new" ? "noreferrer" : undefined } : {};
-  return createElement(tag, { className: "content-block content-block-container", ...props, ...linkProps }, <div className="content-block-container-inner">{editorMode && depth > 0 ? <button type="button" className="page-preview-container-focus-button" data-page-editor-focus-container={block.id} aria-label="Add a widget to this container" title="Add widget here"><Plus size={15} /><span>Add widget</span></button> : null}<PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} className="content-page-renderer-nested" editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth + 1} /></div>);
+  return createElement(tag, { className: "content-block content-block-container", ...props, ...linkProps }, <div className="content-block-container-inner">{editorMode && depth > 0 ? <button type="button" className="page-preview-container-focus-button" data-page-editor-focus-container={block.id} aria-label="Add a widget to this container" title="Add widget here"><Plus size={15} /><span>Add widget</span></button> : null}<PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} className="content-page-renderer-nested" editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth + 1} templateKind={templateKind} /></div>);
 }
 
-export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], forms = [], filterCategory = "", productPage = 1, locations = serviceLocations, className = "", editorMode = false, isAuthenticated = false, depth = 0 }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; filterCategory?: string; productPage?: number; locations?: ServiceLocation[]; className?: string; editorMode?: boolean; isAuthenticated?: boolean; depth?: number }) {
+export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], forms = [], filterCategory = "", productPage = 1, locations = serviceLocations, className = "", editorMode = false, isAuthenticated = false, depth = 0, templateKind }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; filterCategory?: string; productPage?: number; locations?: ServiceLocation[]; className?: string; editorMode?: boolean; isAuthenticated?: boolean; depth?: number; templateKind?: SiteTemplateKind }) {
   return <div className={`content-page-renderer ${className}`.trim()}>{Children.toArray(blocks.map((block) => {
     const data = block.data;
     let rendered: ReactNode;
-    if (block.type === "container") rendered = <ContainerBlock block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth} />;
+    if (block.type === "container") rendered = <ContainerBlock block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth} templateKind={templateKind} />;
     else if (block.type === "hero") rendered = <section className="content-block content-block-hero" {...styledProps(block)}><span className="eyebrow">{text(data.eyebrow) || "Featured content"}</span><h1>{text(data.heading) || "A page built for your audience."}</h1>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}{text(data.ctaLabel) ? <ActionLink href={text(data.ctaHref)} label={text(data.ctaLabel)} /> : null}</section>;
     else if (block.type === "heading") rendered = <HeadingBlock block={block} />;
     else if (block.type === "rich_text") rendered = <RichTextBlock block={block} />;
@@ -385,7 +386,7 @@ export function PageRenderer({ blocks, products = [], testimonials = [], navigat
     else if (block.type === "product_grid" || block.type === "product_category" || block.type === "sale_grid") rendered = <CatalogBlock block={block} products={products} filterCategory={filterCategory} productPage={productPage} />;
     else if (block.type === "gallery") rendered = <GalleryBlock block={block} />;
     else if (block.type === "testimonial_grid") rendered = <TestimonialBlock block={block} testimonials={testimonials} />;
-    else if (block.type === "navigation_menu") rendered = <NavigationBlock block={block} navigationMenus={navigationMenus} isAuthenticated={isAuthenticated} />;
+    else if (block.type === "navigation_menu") rendered = <NavigationBlock block={block} navigationMenus={navigationMenus} isAuthenticated={isAuthenticated} templateKind={templateKind} />;
     else if (block.type === "html") rendered = <HtmlBlock block={block} />;
     else if (block.type === "form") rendered = <FormBlock block={block} forms={forms} />;
     else if (block.type === "location_index") rendered = <LocationIndexBlock block={block} locations={locations} />;

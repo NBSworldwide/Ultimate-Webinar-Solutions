@@ -13,6 +13,6 @@ const fallbackHeaderItems: NavigationMenuItemView[] = [
 
 export async function PublicHeader() {
   const [settings, navigationItems, navigationMenus, currentUser, template] = await Promise.all([getSiteSettings(), getNavigationItemsForLocation("header"), getNavigationMenus(), getCurrentUser(), getActiveSiteTemplate("header")]);
-  if (template) return <header className="public-header public-template-header"><div className="public-template-renderer"><PageRenderer blocks={template.blocks} navigationMenus={navigationMenus} isAuthenticated={Boolean(currentUser)} /></div></header>;
+  if (template) return <header className="public-header public-template-header"><div className="public-template-renderer"><PageRenderer blocks={template.blocks} navigationMenus={navigationMenus} isAuthenticated={Boolean(currentUser)} templateKind="header" /></div></header>;
   return <header className="public-header"><Link href="/" className="public-brand" aria-label={`${settings.displayName} home`}><span className="brand-mark brand-mark-small">{settings.logoUrl ? <img src={settings.logoUrl} alt={settings.logoAlt || settings.displayName} width={20} height={20} /> : <Sparkles size={15} />}</span><span>{settings.displayName}</span></Link><PublicNavigation items={navigationItems.length > 0 ? navigationItems : fallbackHeaderItems} ariaLabel="Primary navigation" isAuthenticated={Boolean(currentUser)} /></header>;
 }

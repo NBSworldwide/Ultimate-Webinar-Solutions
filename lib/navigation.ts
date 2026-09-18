@@ -116,6 +116,16 @@ function toMenuItem(row: NavigationItemRow): NavigationMenuItemView {
   };
 }
 
+export function dedupeNavigationItems(items: NavigationMenuItemView[]): NavigationMenuItemView[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.parentId ?? "root"}\u0000${item.href}\u0000${item.label.trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function toMenu(row: NavigationMenuRow, locations: NavigationLocation[], items: NavigationMenuItemView[]): NavigationMenuView {
   return {
     id: row.id,
@@ -151,7 +161,7 @@ export async function getNavigationMenu(id: string): Promise<NavigationMenuView 
 export const getNavigationItemsForLocation = cache(async (location: NavigationLocation): Promise<NavigationMenuItemView[]> => {
   const menus = await getNavigationMenus();
   const menu = menus.find((candidate) => candidate.locations.includes(location));
-  return menu?.items.filter((item) => item.isVisible) ?? [];
+  return dedupeNavigationItems(menu?.items.filter((item) => item.isVisible) ?? []);
 });
 
 function slugify(value: string): string {

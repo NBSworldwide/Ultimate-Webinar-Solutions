@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown, LogOut, ShoppingCart } from "lucide-react";
-import type { NavigationMenuItemView } from "@/lib/navigation";
+import { dedupeNavigationItems, type NavigationMenuItemView } from "@/lib/navigation";
 
 function isExternal(href: string): boolean {
   return /^https?:\/\//i.test(href);
@@ -26,7 +26,7 @@ function MenuItem({ item, items, nested = false, isAuthenticated }: { item: Navi
 }
 
 export function PublicNavigation({ items, ariaLabel, className = "", isAuthenticated = false }: { items: NavigationMenuItemView[]; ariaLabel: string; className?: string; isAuthenticated?: boolean }) {
-  const visibleItems = items.filter((item) => item.isVisible);
+  const visibleItems = dedupeNavigationItems(items.filter((item) => item.isVisible));
   const roots = visibleItems.filter((item) => !item.parentId).sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
   return <nav className={className ? `public-nav ${className}` : "public-nav"} aria-label={ariaLabel}>{roots.map((item) => <MenuItem key={item.id} item={item} items={visibleItems} isAuthenticated={isAuthenticated} />)}</nav>;
 }

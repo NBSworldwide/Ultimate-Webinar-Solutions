@@ -221,6 +221,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-
 .public-nav-subitem { display: inline-flex; align-items: center; gap: 5px; }
 .public-nav.content-block-menu-horizontal { flex-wrap: wrap; gap: 12px 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
 .public-nav.content-block-menu-stacked { display: grid; gap: 2px; align-items: stretch; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+.public-nav.content-block-template-navigation { flex: 0 0 auto; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.public-nav.content-block-template-navigation.content-block-menu-stacked { display: grid; gap: 8px; align-items: start; }
 .content-block-menu-stacked > a, .content-block-menu-stacked > details > summary { padding: 10px 12px; border-radius: 8px; }
 .content-block-menu-stacked > a:hover, .content-block-menu-stacked > details > summary:hover { background: var(--surface-tinted); }
 .content-block-menu-stacked .public-nav-submenu { position: static; min-width: 0; padding: 0 0 0 12px; border: 0; box-shadow: none; }

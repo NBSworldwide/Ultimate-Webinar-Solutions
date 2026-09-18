@@ -7,7 +7,7 @@ import { getActiveSiteTemplate } from "@/lib/templates";
 
 export async function PublicFooter() {
   const [settings, navigationItems, navigationMenus, template] = await Promise.all([getSiteSettings(), getNavigationItemsForLocation("footer"), getNavigationMenus(), getActiveSiteTemplate("footer")]);
-  if (template) return <footer className="public-footer public-template-footer"><div className="public-template-renderer"><PageRenderer blocks={template.blocks} navigationMenus={navigationMenus} /></div></footer>;
+  if (template) return <footer className="public-footer public-template-footer"><div className="public-template-renderer"><PageRenderer blocks={template.blocks} navigationMenus={navigationMenus} templateKind="footer" /></div></footer>;
   const address = siteAddressLines(settings);
   const email = siteContactEmail(settings);
   const fallbackFooterItems: NavigationMenuItemView[] = [

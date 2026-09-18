@@ -129,7 +129,7 @@ test("administrator login redirects to the backend while attendee return paths s
 });
 
 test("navigation menu ordering keeps the stable primary menu first", async () => {
-  const { orderNavigationMenus } = await import("@/lib/navigation");
+  const { dedupeNavigationItems, orderNavigationMenus } = await import("@/lib/navigation");
   const menu = (id: string, slug: string, name: string): NavigationMenuView => ({
     id,
     slug,
@@ -146,6 +146,12 @@ test("navigation menu ordering keeps the stable primary menu first", async () =>
   ]);
 
   assert.deepEqual(ordered.map(({ slug }) => slug), ["primary-navigation", "footer-navigation"]);
+
+  const items = [
+    { id: "system-shop", parentId: null, label: "Shop", href: "/products", itemType: "system" as const, entityId: "shop", openInNewTab: false, isVisible: true, sortOrder: 1, autoAdded: false },
+    { id: "page-shop", parentId: null, label: "Shop", href: "/products", itemType: "page" as const, entityId: "page-demo-shop", openInNewTab: false, isVisible: true, sortOrder: 100, autoAdded: true },
+  ];
+  assert.deepEqual(dedupeNavigationItems(items).map(({ id }) => id), ["system-shop"]);
 });
 
 test("Google Maps blocks accept addresses and range-checked coordinates", async () => {
