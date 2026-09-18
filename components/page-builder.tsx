@@ -582,6 +582,7 @@ function PageBlockAdvancedFields({ block, onChange, onStyleChange }: { block: Pa
     <div className="page-style-grid">
       <label className="field"><span>CSS ID</span><input id={`page-${block.id}-cssId`} value={String(block.data.cssId ?? "")} onChange={(event) => onChange("cssId", event.target.value)} placeholder="section-name" /></label>
       <label className="field"><span>Hide on</span><select id={`page-${block.id}-visibility`} value={visibility} onChange={(event) => onChange("visibility", event.target.value)}><option value="all">All devices</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></label>
+      <label className="field"><span>Order</span><input type="number" min={-100} max={100} value={style.order ?? ""} onChange={(event) => onStyleChange({ ...style, order: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder="0" /></label>
     </div>
     <details className="page-builder-advanced-section" open><summary>Responsive visibility</summary><p className="field-help">Hide this block on the exact device class without changing the content on other breakpoints.</p><div className="page-style-grid">{responsiveDevices.map(([device, label]) => <label className="form-choice" key={device}><input type="checkbox" checked={hiddenDevices.has(device)} onChange={(event) => toggleResponsiveDevice(device, event.target.checked)} /><span>{label}</span></label>)}</div></details>
     <details className="page-builder-advanced-section"><summary>Attributes</summary><div className="page-style-grid"><label className="field"><span>ARIA label</span><input value={String(block.data.ariaLabel ?? "")} onChange={(event) => onChange("ariaLabel", event.target.value)} placeholder="Describe this section" /></label><label className="field"><span>Role</span><select value={String(block.data.role ?? "")} onChange={(event) => onChange("role", event.target.value)}><option value="">No role</option><option value="region">Region</option><option value="article">Article</option><option value="section">Section</option><option value="navigation">Navigation</option><option value="complementary">Complementary</option><option value="main">Main</option></select></label></div><label className="field"><span>Title attribute</span><input value={String(block.data.titleAttribute ?? "")} onChange={(event) => onChange("titleAttribute", event.target.value)} placeholder="Optional hover description" /></label></details>
@@ -642,7 +643,7 @@ export function PageBuilder({ page, template, headerTemplate, footerTemplate, na
   const [isActive, setIsActive] = useState(() => template?.isActive ?? false);
   const [seoTitle, setSeoTitle] = useState(() => page?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(() => page?.seoDescription ?? "");
-  const [blocks, setBlocks] = useState<PageBlock[]>(() => page?.blocks ?? []);
+  const [blocks, setBlocks] = useState<PageBlock[]>(() => page?.blocks ?? template?.blocks ?? []);
   const [dragPath, setDragPath] = useState<BlockPath | null>(null);
   const [paletteDragKey, setPaletteDragKey] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);

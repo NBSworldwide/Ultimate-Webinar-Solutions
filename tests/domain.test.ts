@@ -69,6 +69,32 @@ test("container responsive layout overrides normalize and emit device CSS variab
   assert.equal(css["--container-column-gap-mobilePortrait"], "12px");
 });
 
+test("block order and mask settings normalize and emit responsive CSS variables", async () => {
+  const { normalizePageBlockStyle, pageBlockStyleToCss } = await import("@/lib/page-styles");
+  const style = normalizePageBlockStyle({
+    order: 4.8,
+    mask: {
+      enabled: true,
+      shape: "custom",
+      image: "/media/mask.svg",
+      size: { desktop: "contain", mobilePortrait: "cover" },
+      position: { mobilePortrait: "bottom" },
+      repeat: { desktop: "no-repeat", mobilePortrait: "repeat-x" },
+    },
+  });
+
+  assert.equal(style?.order, 5);
+  assert.equal(style?.mask?.size?.mobilePortrait, "cover");
+  assert.equal(style?.mask?.position?.mobilePortrait, "bottom");
+  assert.equal(style?.mask?.repeat?.mobilePortrait, "repeat-x");
+  const css = pageBlockStyleToCss(style);
+  assert.equal(css["--block-order"], "5");
+  assert.equal(css["--block-mask-size-desktop"], "contain");
+  assert.equal(css["--block-mask-size-mobilePortrait"], "cover");
+  assert.equal(css["--block-mask-position-mobilePortrait"], "bottom");
+  assert.equal(css["--block-mask-repeat-mobilePortrait"], "repeat-x");
+});
+
 test("role capabilities keep administrator, manager, and customer boundaries distinct", () => {
   const admin = { role: "admin" as const };
   const manager = { role: "manager" as const };

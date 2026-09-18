@@ -1,4 +1,4 @@
-import type { PageBlockLayout, PageBlockLayoutResponsive, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber } from "@/lib/types";
+import type { PageBlockLayout, PageBlockLayoutResponsive, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber, PageStyleResponsiveString } from "@/lib/types";
 
 export const PAGE_STYLE_DEVICES: Array<{ key: PageStyleDevice; label: string }> = [
   { key: "widescreen", label: "Widescreen" },
@@ -54,6 +54,17 @@ function responsiveNumbers(value: unknown, min: number, max: number): PageStyleN
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function responsiveStrings<T extends string>(value: unknown, allowed: readonly T[]): PageStyleResponsiveString<T> | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  const result: PageStyleResponsiveString<T> = {};
+  for (const key of deviceKeys) {
+    const next = enumValue(source[key], allowed);
+    if (next) result[key] = next;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function edges(value: unknown, min: number, max: number): PageStyleEdges | undefined {
   const source = record(value);
   if (!source) return undefined;
@@ -86,6 +97,8 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
   result.maxWidth = responsiveNumbers(source.maxWidth, 0, 100);
   result.height = responsiveNumbers(source.height, 0, 3_000);
   result.opacity = responsiveNumbers(source.opacity, 0, 1);
+  const order = numberValue(source.order, -10_000, 10_000);
+  if (order !== undefined) result.order = Math.round(order);
   const alignSelf = enumValue(source.alignSelf, ["default", "start", "center", "end", "stretch"] as const);
   if (alignSelf) result.alignSelf = alignSelf;
   const position = enumValue(source.position, ["default", "relative", "absolute", "fixed"] as const);
@@ -232,6 +245,9 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     if (shape) result.mask.shape = shape;
     const image = imageValue(mask.image);
     if (image) result.mask.image = image;
+    result.mask.size = responsiveStrings(mask.size, ["auto", "contain", "cover"] as const);
+    result.mask.position = responsiveStrings(mask.position, ["center", "top", "right", "bottom", "left"] as const);
+    result.mask.repeat = responsiveStrings(mask.repeat, ["no-repeat", "repeat", "repeat-x", "repeat-y"] as const);
     if (Object.keys(result.mask).length === 0) delete result.mask;
   }
 
@@ -387,6 +403,14 @@ function setResponsiveVariable(target: Record<string, string>, prefix: string, v
   }
 }
 
+function setResponsiveStringVariable(target: Record<string, string>, prefix: string, values: PageStyleResponsiveString<string> | undefined) {
+  if (!values) return;
+  for (const device of deviceKeys) {
+    const value = values[device];
+    if (value) target[`${prefix}-${device}`] = value;
+  }
+}
+
 function setResponsiveEdgeVariables(target: Record<string, string>, prefix: string, values: PageStyleBox | undefined, format: (value: number) => string) {
   if (!values) return;
   for (const device of deviceKeys) {
@@ -426,6 +450,7 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
   setResponsiveVariable(css, "--block-max-width", style.maxWidth, (value) => `${value}%`);
   setResponsiveVariable(css, "--block-height", style.height, (value) => `${value}px`);
   setResponsiveVariable(css, "--block-opacity", style.opacity, (value) => String(value));
+  if (style.order !== undefined) css["--block-order"] = String(style.order);
   if (style.alignSelf) css["--block-align-self"] = style.alignSelf === "default" ? "auto" : style.alignSelf === "center" ? "center" : style.alignSelf === "end" ? "end" : style.alignSelf === "stretch" ? "stretch" : "start";
   if (style.position) css["--block-position"] = style.position === "default" ? "static" : style.position;
   if (style.zIndex !== undefined) css["--block-z-index"] = String(style.zIndex);
@@ -536,6 +561,9 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
     const shape = style.mask.shape ?? "circle";
     if (shape === "custom" && style.mask.image) css["--block-mask-image"] = cssUrl(style.mask.image);
     else if (maskClipPaths[shape]) css["--block-clip-path"] = maskClipPaths[shape];
+    setResponsiveStringVariable(css, "--block-mask-size", style.mask.size);
+    setResponsiveStringVariable(css, "--block-mask-position", style.mask.position);
+    setResponsiveStringVariable(css, "--block-mask-repeat", style.mask.repeat);
   }
   return css;
 }

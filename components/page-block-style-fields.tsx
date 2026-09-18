@@ -12,6 +12,7 @@ import type {
   PageStyleDevice,
   PageStyleEdges,
   PageStyleNumber,
+  PageStyleResponsiveString,
 } from "@/lib/types";
 
 type EdgeName = keyof PageStyleEdges;
@@ -180,6 +181,18 @@ export function PageBlockStyleFields({ block, onChange }: {
     update({ ...style, mask: { ...style.mask, [key]: value === "" ? undefined : value } });
   }
 
+  function maskResponsiveValue(key: "size" | "position" | "repeat", fallback: string): string {
+    const values = style.mask?.[key] as PageStyleResponsiveString<string> | undefined;
+    return values?.[device] ?? values?.desktop ?? fallback;
+  }
+
+  function setMaskResponsive(key: "size" | "position" | "repeat", value: string) {
+    const values = { ...((style.mask?.[key] as PageStyleResponsiveString<string> | undefined) ?? {}) };
+    if (value === "") delete values[device];
+    else values[device] = value;
+    update({ ...style, mask: { ...style.mask, [key]: Object.keys(values).length > 0 ? values : undefined } });
+  }
+
   function setWidget(key: string, value: unknown) {
     update({ ...style, widget: { ...style.widget, [key]: value === "" ? undefined : value } });
   }
@@ -287,6 +300,7 @@ export function PageBlockStyleFields({ block, onChange }: {
         <summary>Mask</summary>
         <div className="page-style-grid"><label className="field"><span>Mask</span><select value={style.mask?.enabled ? "on" : "off"} onChange={(event) => setMask("enabled", event.target.value === "on")}><option value="off">Off</option><option value="on">On</option></select></label>{style.mask?.enabled ? <label className="field"><span>Shape</span><select value={style.mask.shape ?? "circle"} onChange={(event) => setMask("shape", event.target.value)}><option value="circle">Circle</option><option value="oval">Oval</option><option value="pill">Pill horizontal</option><option value="pill-vertical">Pill vertical</option><option value="triangle">Triangle</option><option value="diamond">Diamond</option><option value="hexagon">Hexagon</option><option value="blob">Blob</option><option value="custom">Custom image or SVG</option></select></label> : null}</div>
         {style.mask?.enabled && style.mask.shape === "custom" ? <label className="field"><span>Mask image or SVG URL</span><input type="url" value={style.mask.image ?? ""} onChange={(event) => setMask("image", event.target.value)} placeholder="https://images.example.com/mask.svg" /></label> : null}
+        {style.mask?.enabled ? <div className="page-style-grid"><label className="field"><span>Mask size</span><select value={maskResponsiveValue("size", "cover")} onChange={(event) => setMaskResponsive("size", event.target.value)}><option value="auto">Auto</option><option value="contain">Contain</option><option value="cover">Cover</option></select></label><label className="field"><span>Mask position</span><select value={maskResponsiveValue("position", "center")} onChange={(event) => setMaskResponsive("position", event.target.value)}><option value="center">Center</option><option value="top">Top</option><option value="right">Right</option><option value="bottom">Bottom</option><option value="left">Left</option></select></label><label className="field"><span>Mask repeat</span><select value={maskResponsiveValue("repeat", "no-repeat")} onChange={(event) => setMaskResponsive("repeat", event.target.value)}><option value="no-repeat">No repeat</option><option value="repeat">Repeat</option><option value="repeat-x">Repeat horizontally</option><option value="repeat-y">Repeat vertically</option></select></label></div> : null}
         <p className="page-style-help">Masks are applied to the selected block without changing its layout box.</p>
       </details>
 

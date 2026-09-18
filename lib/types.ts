@@ -410,6 +410,10 @@ export type PageStyleBorderType = "default" | "none" | "solid" | "double" | "dot
 export type PageStyleBackgroundMode = "none" | "classic" | "gradient" | "video" | "slideshow";
 export type PageStyleGradientType = "linear" | "radial";
 export type PageStyleMaskShape = "circle" | "oval" | "pill" | "pill-vertical" | "triangle" | "diamond" | "hexagon" | "blob" | "custom";
+export type PageStyleMaskSize = "auto" | "contain" | "cover";
+export type PageStyleMaskPosition = "center" | "top" | "right" | "bottom" | "left";
+export type PageStyleMaskRepeat = "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+export type PageStyleResponsiveString<T extends string> = Partial<Record<PageStyleDevice, T>>;
 export type PageStyleAspectRatio = "1/1" | "3/2" | "4/3" | "16/9" | "21/9" | "9/16";
 
 export interface PageBlockStyle {
@@ -418,6 +422,7 @@ export interface PageBlockStyle {
   maxWidth?: PageStyleNumber;
   height?: PageStyleNumber;
   opacity?: PageStyleNumber;
+  order?: number;
   alignSelf?: "default" | "start" | "center" | "end" | "stretch";
   position?: "default" | "relative" | "absolute" | "fixed";
   zIndex?: number;
@@ -471,7 +476,7 @@ export interface PageBlockStyle {
     radius?: PageStyleBox;
     shadow?: { color?: string; horizontal?: number; vertical?: number; blur?: number; spread?: number; position?: "outline" | "inset"; };
   };
-  mask?: { enabled?: boolean; shape?: PageStyleMaskShape; image?: string; };
+  mask?: { enabled?: boolean; shape?: PageStyleMaskShape; image?: string; size?: PageStyleResponsiveString<PageStyleMaskSize>; position?: PageStyleResponsiveString<PageStyleMaskPosition>; repeat?: PageStyleResponsiveString<PageStyleMaskRepeat>; };
   widget?: {
     aspectRatio?: PageStyleAspectRatio;
     imagePosition?: "left" | "top" | "right" | "bottom";
