@@ -12,6 +12,7 @@ const pageSchema = z.object({
   title: z.string().trim().min(2).max(140),
   excerpt: z.string().trim().max(500).default(""),
   status: z.enum(["draft", "published", "archived"]),
+  isHomepage: z.boolean().default(false),
   blocks: z.unknown(),
   seoTitle: z.string().trim().max(160).default(""),
   seoDescription: z.string().trim().max(300).default(""),
@@ -23,6 +24,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     assertSameOrigin(request);
     const page = await updatePage((await params).id, pageSchema.parse(await request.json()), user.id);
+    revalidatePath("/");
+    revalidatePath("/products");
+    revalidatePath("/locations");
     revalidatePath("/pages");
     revalidatePath(`/pages/${page.slug}`);
     revalidatePath("/admin/pages");

@@ -32,6 +32,21 @@ export interface NavigationMenuView {
   updatedAt: string;
 }
 
+export const primaryNavigationSlug = "primary-navigation";
+
+function pageHref(slug: string, isHomepage = false): string {
+  return isHomepage ? "/" : slug === "service-locations" ? "/locations" : slug === "products" ? "/products" : slug.startsWith("location-") ? `/locations/${slug.slice("location-".length)}` : `/pages/${slug}`;
+}
+
+export function orderNavigationMenus(menus: NavigationMenuView[]): NavigationMenuView[] {
+  return [...menus].sort((left, right) => {
+    const leftIsPrimary = left.slug === primaryNavigationSlug;
+    const rightIsPrimary = right.slug === primaryNavigationSlug;
+    if (leftIsPrimary !== rightIsPrimary) return leftIsPrimary ? -1 : 1;
+    return left.name.localeCompare(right.name) || left.slug.localeCompare(right.slug);
+  });
+}
+
 export interface NavigationCandidate {
   key: string;
   label: string;
@@ -276,7 +291,7 @@ export async function getNavigationCandidates(): Promise<NavigationCandidate[]> 
   await assertStandaloneDataset();
   const database = getDb();
   const [pages, products, categories, sessions, sessionCategories] = await Promise.all([
-    database.query<{ id: string; title: string; slug: string }>("SELECT id, title, slug FROM content_pages WHERE status = 'published' ORDER BY title LIMIT 100"),
+    database.query<{ id: string; title: string; slug: string; is_homepage: boolean | number }>("SELECT id, title, slug, is_homepage FROM content_pages WHERE status = 'published' ORDER BY title LIMIT 100"),
     database.query<{ id: string; name: string; slug: string }>("SELECT id, name, slug FROM products WHERE status = 'active' ORDER BY name LIMIT 100"),
     database.query<{ id: string; name: string; slug: string }>("SELECT id, name, slug FROM product_categories WHERE status = 'active' ORDER BY name LIMIT 100"),
     database.query<{ id: string; title: string; slug: string }>("SELECT id, title, slug FROM webinars WHERE status IN ('published','sold_out','completed') AND visibility = 'public' ORDER BY starts_at DESC LIMIT 100"),
@@ -290,7 +305,7 @@ export async function getNavigationCandidates(): Promise<NavigationCandidate[]> 
   ].map(([id, label, href]) => ({ key: `system:${id}`, label, href, itemType: "system", entityId: id, group: "System links" }));
   return [
     ...system,
-    ...pages.rows.map((page) => ({ key: `page:${page.id}`, label: page.title, href: `/pages/${page.slug}`, itemType: "page" as const, entityId: page.id, group: "Published pages" })),
+    ...pages.rows.map((page) => ({ key: `page:${page.id}`, label: page.title, href: pageHref(page.slug, Boolean(page.is_homepage)), itemType: "page" as const, entityId: page.id, group: "Published pages" })),
     ...products.rows.map((product) => ({ key: `product:${product.id}`, label: product.name, href: `/products/${product.slug}`, itemType: "product" as const, entityId: product.id, group: "Products" })),
     ...categories.rows.map((category) => ({ key: `product-category:${category.id}`, label: category.name, href: `/products?category=${encodeURIComponent(category.slug)}`, itemType: "product_category" as const, entityId: category.id, group: "Product categories" })),
     ...sessions.rows.map((session) => ({ key: `session:${session.id}`, label: session.title, href: `/webinars/${session.slug}`, itemType: "session" as const, entityId: session.id, group: "Public sessions" })),
@@ -298,17 +313,18 @@ export async function getNavigationCandidates(): Promise<NavigationCandidate[]> 
   ];
 }
 
-export async function syncPublishedPageMenuItem(database: Pick<DatabaseClient, "query">, page: { id: string; slug: string; title: string; status: "draft" | "published" | "archived" }, now: string): Promise<void> {
+export async function syncPublishedPageMenuItem(database: Pick<DatabaseClient, "query">, page: { id: string; slug: string; title: string; status: "draft" | "published" | "archived"; isHomepage: boolean }, now: string): Promise<void> {
   const menuResult = await database.query<{ id: string }>("SELECT id FROM navigation_menus WHERE slug = 'primary-navigation' AND auto_add_published_pages = TRUE LIMIT 1");
   const menuId = menuResult.rows[0]?.id;
   if (!menuId) return;
   const existing = await database.query<{ id: string }>("SELECT id FROM navigation_menu_items WHERE menu_id = $1 AND item_type = 'page' AND entity_id = $2 LIMIT 1", [menuId, page.id]);
+  const href = pageHref(page.slug, page.isHomepage);
   if (page.status === "published") {
     if (existing.rows[0]) {
-      await database.query("UPDATE navigation_menu_items SET label=$1, href=$2, is_visible=TRUE, updated_at=$3 WHERE id=$4", [page.title, `/pages/${page.slug}`, now, existing.rows[0].id]);
+      await database.query("UPDATE navigation_menu_items SET label=$1, href=$2, is_visible=TRUE, updated_at=$3 WHERE id=$4", [page.title, href, now, existing.rows[0].id]);
     } else {
       const last = await database.query<{ sort_order: number | string }>("SELECT COALESCE(MAX(sort_order), 0)::int AS sort_order FROM navigation_menu_items WHERE menu_id = $1", [menuId]);
-      await database.query("INSERT INTO navigation_menu_items (id, menu_id, label, href, item_type, entity_id, is_visible, sort_order, auto_added, created_at, updated_at) VALUES ($1,$2,$3,$4,'page',$5,TRUE,$6,TRUE,$7,$7)", [`navigation-page-${randomUUID()}`, menuId, page.title, `/pages/${page.slug}`, page.id, Number(last.rows[0]?.sort_order ?? 0) + 1, now]);
+      await database.query("INSERT INTO navigation_menu_items (id, menu_id, label, href, item_type, entity_id, is_visible, sort_order, auto_added, created_at, updated_at) VALUES ($1,$2,$3,$4,'page',$5,TRUE,$6,TRUE,$7,$7)", [`navigation-page-${randomUUID()}`, menuId, page.title, href, page.id, Number(last.rows[0]?.sort_order ?? 0) + 1, now]);
     }
   } else if (existing.rows[0]) {
     await database.query("UPDATE navigation_menu_items SET is_visible=FALSE, updated_at=$1 WHERE id=$2", [now, existing.rows[0].id]);

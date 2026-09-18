@@ -7,14 +7,14 @@ import { hasMapCoordinateInput, normalizeMapLocation } from "@/lib/map-location"
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import type { ContentPage, PageBlock, PageBlockType, PageStatus } from "@/lib/types";
 
-const blockTypes: PageBlockType[] = ["hero", "rich_text", "image", "image_box", "icon_box", "button", "cta", "product_grid", "product_category", "sale_grid", "gallery", "testimonial_grid", "navigation_menu", "html", "map", "spacer", "container"];
+const blockTypes: PageBlockType[] = ["hero", "heading", "rich_text", "image", "image_box", "icon_box", "video", "button", "cta", "product_grid", "product_category", "sale_grid", "gallery", "testimonial_grid", "navigation_menu", "form", "location_index", "location_detail", "html", "map", "spacer", "container"];
 const pageFields = `id, slug, title, excerpt, status, blocks_json, seo_title, seo_description,
-  created_by, updated_by, created_at, updated_at, published_at`;
+  is_homepage, created_by, updated_by, created_at, updated_at, published_at`;
 
 type PageRow = DatabaseRow & {
   id: string; slug: string; title: string; excerpt: string; status: PageStatus; blocks_json: string;
   seo_title: string; seo_description: string; created_by: string | null; updated_by: string | null;
-  created_at: string; updated_at: string; published_at: string | null; revision: number | string;
+  created_at: string; updated_at: string; published_at: string | null; is_homepage: boolean | number; revision: number | string;
 };
 
 function textValue(value: unknown, max: number): string {
@@ -53,7 +53,35 @@ function normalizeBlock(block: unknown, index: number, depth: number): PageBlock
 export function normalizePageBlocks(input: unknown, depth = 0): PageBlock[] {
   if (!Array.isArray(input)) throw new DomainError("Page content must be an array of blocks.");
   if (input.length > 50) throw new DomainError("A page can contain at most 50 blocks.");
-  return input.map((block, index) => normalizeBlock(block, index, depth));
+  const blocks = input.map((block, index) => normalizeBlock(block, index, depth));
+  if (depth > 0) return blocks;
+
+  // Older standalone seed pages stored widgets directly at the page root. Keep
+  // those pages readable while moving the editor and renderer to the invariant
+  // that every top-level item is a container.
+  const normalized: PageBlock[] = [];
+  let legacyChildren: PageBlock[] = [];
+  const flushLegacyChildren = () => {
+    if (legacyChildren.length === 0) return;
+    normalized.push({
+      id: `legacy-container-${normalized.length + 1}`,
+      type: "container",
+      data: {},
+      layout: { mode: "flex", contentWidth: "full", spacing: "global", direction: "column", justifyContent: "start", alignItems: "stretch", wrap: "nowrap", columns: 1, rows: 1, autoFlow: "row", justifyItems: "stretch" },
+      children: legacyChildren,
+    });
+    legacyChildren = [];
+  };
+  for (const block of blocks) {
+    if (block.type === "container") {
+      flushLegacyChildren();
+      normalized.push(block);
+    } else {
+      legacyChildren.push(block);
+    }
+  }
+  flushLegacyChildren();
+  return normalized;
 }
 
 function toPage(row: PageRow): ContentPage {
@@ -61,6 +89,7 @@ function toPage(row: PageRow): ContentPage {
   try { blocks = normalizePageBlocks(JSON.parse(row.blocks_json)); } catch { blocks = []; }
   return {
     id: row.id, slug: row.slug, title: row.title, excerpt: row.excerpt, status: row.status,
+    isHomepage: Boolean(row.is_homepage),
     blocks, seoTitle: row.seo_title, seoDescription: row.seo_description, createdBy: row.created_by,
     updatedBy: row.updated_by, createdAt: row.created_at, updatedAt: row.updated_at,
     publishedAt: row.published_at, revision: Number(row.revision ?? 0),
@@ -73,17 +102,17 @@ function normalizeSlug(value: string): string {
   return slug;
 }
 
-function normalizePageInput(input: PageInput): { slug: string; title: string; excerpt: string; status: PageStatus; blocks: PageBlock[]; seoTitle: string; seoDescription: string } {
+function normalizePageInput(input: PageInput): { slug: string; title: string; excerpt: string; status: PageStatus; isHomepage: boolean; blocks: PageBlock[]; seoTitle: string; seoDescription: string } {
   const title = textValue(input.title, 140);
   if (title.length < 2) throw new DomainError("A page title is required.");
   return {
     slug: normalizeSlug(input.slug || title), title, excerpt: textValue(input.excerpt, 500),
-    status: input.status, blocks: normalizePageBlocks(input.blocks), seoTitle: textValue(input.seoTitle, 160),
+    status: input.status, isHomepage: input.isHomepage === true && input.status === "published", blocks: normalizePageBlocks(input.blocks), seoTitle: textValue(input.seoTitle, 160),
     seoDescription: textValue(input.seoDescription, 300),
   };
 }
 
-export type PageInput = { slug: string; title: string; excerpt: string; status: PageStatus; blocks: unknown; seoTitle: string; seoDescription: string };
+export type PageInput = { slug: string; title: string; excerpt: string; status: PageStatus; isHomepage?: boolean; blocks: unknown; seoTitle: string; seoDescription: string };
 
 export async function getPages(filters?: { query?: string; status?: PageStatus | "all" }): Promise<ContentPage[]> {
   await assertStandaloneDataset();
@@ -109,6 +138,12 @@ export async function getPublishedPageBySlug(slug: string): Promise<ContentPage 
   return rows[0] ? toPage(rows[0]) : null;
 }
 
+export async function getPublishedHomepage(): Promise<ContentPage | null> {
+  await assertStandaloneDataset();
+  const { rows } = await getDb().query<PageRow>(`SELECT p.*, COALESCE((SELECT MAX(version) FROM content_page_revisions r WHERE r.page_id = p.id), 0)::int AS revision FROM content_pages p WHERE p.is_homepage = TRUE AND p.status = 'published' ORDER BY p.updated_at DESC LIMIT 1`);
+  return rows[0] ? toPage(rows[0]) : null;
+}
+
 export function pageSlugFromTitle(title: string): string { return normalizeSlug(title); }
 
 export async function createPage(input: PageInput, actorId: string): Promise<ContentPage> {
@@ -119,9 +154,10 @@ export async function createPage(input: PageInput, actorId: string): Promise<Con
   const client = await getDb().connect();
   try {
     await client.query("BEGIN");
-    await client.query(`INSERT INTO content_pages (${pageFields.replace(/, /g, ", ")}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [id, page.slug, page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, actorId, actorId, now, now, page.status === "published" ? now : null]);
+    if (page.isHomepage) await client.query("UPDATE content_pages SET is_homepage = FALSE WHERE is_homepage = TRUE");
+    await client.query(`INSERT INTO content_pages (${pageFields.replace(/, /g, ", ")}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [id, page.slug, page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, page.isHomepage, actorId, actorId, now, now, page.status === "published" ? now : null]);
     await client.query(`INSERT INTO content_page_revisions (id, page_id, version, title, excerpt, status, blocks_json, seo_title, seo_description, saved_by, created_at) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10)`, [randomUUID(), id, page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, actorId, now]);
-    await syncPublishedPageMenuItem(client, { id, slug: page.slug, title: page.title, status: page.status }, now);
+    await syncPublishedPageMenuItem(client, { id, slug: page.slug, title: page.title, status: page.status, isHomepage: page.isHomepage }, now);
     await client.query("INSERT INTO audit_events (id, actor_id, event_type, entity_type, entity_id, metadata_json, created_at) VALUES ($1,$2,'page.created','content_page',$3,$4,$5)", [randomUUID(), actorId, id, JSON.stringify({ synthetic: true, status: page.status }), now]);
     await client.query("COMMIT");
   } catch (error) {
@@ -145,9 +181,10 @@ export async function updatePage(id: string, input: PageInput, actorId: string):
     if (!existing.rows[0]) throw new DomainError("Page not found.", 404);
     const publishedAt = page.status === "published" ? existing.rows[0].published_at ?? now : null;
     const version = await client.query<{ version: number }>("SELECT COALESCE(MAX(version), 0)::int + 1 AS version FROM content_page_revisions WHERE page_id = $1", [id]);
-    await client.query("UPDATE content_pages SET slug=$1,title=$2,excerpt=$3,status=$4,blocks_json=$5,seo_title=$6,seo_description=$7,updated_by=$8,updated_at=$9,published_at=$10 WHERE id=$11", [page.slug, page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, actorId, now, publishedAt, id]);
+    if (page.isHomepage) await client.query("UPDATE content_pages SET is_homepage = FALSE WHERE is_homepage = TRUE AND id <> $1", [id]);
+    await client.query("UPDATE content_pages SET slug=$1,title=$2,excerpt=$3,status=$4,blocks_json=$5,seo_title=$6,seo_description=$7,is_homepage=$8,updated_by=$9,updated_at=$10,published_at=$11 WHERE id=$12", [page.slug, page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, page.isHomepage, actorId, now, publishedAt, id]);
     await client.query("INSERT INTO content_page_revisions (id,page_id,version,title,excerpt,status,blocks_json,seo_title,seo_description,saved_by,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", [randomUUID(), id, Number(version.rows[0]?.version ?? 1), page.title, page.excerpt, page.status, JSON.stringify(page.blocks), page.seoTitle, page.seoDescription, actorId, now]);
-    await syncPublishedPageMenuItem(client, { id, slug: page.slug, title: page.title, status: page.status }, now);
+    await syncPublishedPageMenuItem(client, { id, slug: page.slug, title: page.title, status: page.status, isHomepage: page.isHomepage }, now);
     await client.query("INSERT INTO audit_events (id,actor_id,event_type,entity_type,entity_id,metadata_json,created_at) VALUES ($1,$2,'page.updated','content_page',$3,$4,$5)", [randomUUID(), actorId, id, JSON.stringify({ synthetic: true, status: page.status, blockCount: page.blocks.length }), now]);
     await client.query("COMMIT");
   } catch (error) {

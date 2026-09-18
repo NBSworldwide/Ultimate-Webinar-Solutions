@@ -14,6 +14,8 @@ export type Capability =
   | "registrations.view"
   | "analytics.view"
   | "appearance.manage"
+  | "forms.manage"
+  | "media.manage"
   | "email.manage"
   | "crm.manage"
   | "messaging.manage"
@@ -33,6 +35,8 @@ const allCapabilities: readonly Capability[] = [
   "registrations.view",
   "analytics.view",
   "appearance.manage",
+  "forms.manage",
+  "media.manage",
   "email.manage",
   "crm.manage",
   "messaging.manage",
@@ -55,6 +59,8 @@ const capabilitiesByRole: Record<Role, readonly Capability[]> = {
     "registrations.view",
     "analytics.view",
     "appearance.manage",
+    "forms.manage",
+    "media.manage",
     "email.manage",
     "team.view",
     "team.promote",

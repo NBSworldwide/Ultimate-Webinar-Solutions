@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="title desc">
+  <title id="title">Webinar studio mark</title>
+  <desc id="desc">Abstract teal and coral panels for a webinar studio.</desc>
+  <rect width="800" height="520" rx="40" fill="#f7f8f5"/>
+  <path d="M0 350 245 112c30-29 79-28 108 2l151 153c27 28 73 30 103 5L800 99v421H0Z" fill="#0f776e"/>
+  <path d="m800 0-128 115c-30 27-75 25-102-3L470 11c-30-31-80-31-111 0L0 356V0Z" fill="#17211f"/>
+  <circle cx="589" cy="189" r="74" fill="#e56d54"/>
+  <circle cx="589" cy="189" r="27" fill="#f7f8f5"/>
+  <path d="M589 145v88M545 189h88" stroke="#f7f8f5" stroke-width="10" stroke-linecap="round"/>
+</svg>

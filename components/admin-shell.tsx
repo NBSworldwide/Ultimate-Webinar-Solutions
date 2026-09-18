@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarDays, CircleHelp, ClipboardList, ContactRound, FileText, LayoutDashboard, Layers3, LockKeyhole, Mail, Menu, MessageSquareText, Package, Percent, Settings2, Sparkles, UsersRound, Warehouse } from "lucide-react";
+import { BarChart3, CalendarDays, CircleHelp, ClipboardList, ClipboardPenLine, ContactRound, FileText, Images, LayoutDashboard, Layers3, LockKeyhole, Mail, MapPin, Menu, MessageSquareText, Package, Percent, Settings2, Sparkles, UserRound, UsersRound, Warehouse } from "lucide-react";
 import type { User } from "@/lib/types";
 import type { SiteSettings } from "@/lib/types";
 import { hasCapability, roleLabel } from "@/lib/authorization";
@@ -14,6 +14,8 @@ const navigationGroups = [
     label: "Content",
     items: [
       { href: "/admin/pages", label: "Pages", icon: FileText, capability: "content.manage" },
+      { href: "/admin/locations", label: "Service locations", icon: MapPin, capability: "content.manage" },
+      { href: "/admin/forms", label: "Forms", icon: ClipboardPenLine, capability: "forms.manage" },
       { href: "/admin/webinars", label: "Webinars", icon: CalendarDays, capability: "webinars.manage" },
       { href: "/admin/private-webinars", label: "Private webinars", icon: LockKeyhole, capability: "webinars.manage" },
       { href: "/admin/playbooks", label: "Playbooks", icon: Layers3, capability: "content.manage" },
@@ -70,9 +72,12 @@ export function AdminShell({ user, settings, children }: { user: User; settings:
           })}</div>;
           })}
           <p className="nav-label nav-label-spaced">System</p>
+          <Link href="/account" className={`nav-item ${pathname === "/account" ? "nav-item-active" : ""}`}><UserRound size={18} /><span>My account</span></Link>
           {hasCapability(user, "team.view") ? <Link href="/admin/team" className={`nav-item ${pathname.startsWith("/admin/team") ? "nav-item-active" : ""}`}><UsersRound size={18} /><span>Team & access</span></Link> : null}
           {hasCapability(user, "appearance.manage") ? <Link href="/admin/navigation" className={`nav-item ${pathname.startsWith("/admin/navigation") ? "nav-item-active" : ""}`}><Menu size={18} /><span>Navigation</span></Link> : null}
-          {hasCapability(user, "appearance.manage") ? <Link href="/admin/settings" className={`nav-item ${pathname.startsWith("/admin/settings") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Appearance & settings</span></Link> : null}
+          {hasCapability(user, "appearance.manage") ? <Link href="/admin/appearance" className={`nav-item ${pathname.startsWith("/admin/appearance") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Appearance</span></Link> : null}
+          {hasCapability(user, "media.manage") ? <Link href="/admin/media" className={`nav-item ${pathname.startsWith("/admin/media") ? "nav-item-active" : ""}`}><Images size={18} /><span>Media library</span></Link> : null}
+          {hasCapability(user, "settings.manage") ? <Link href="/admin/settings" className={`nav-item ${pathname.startsWith("/admin/settings") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Site settings</span></Link> : null}
           <Link href="/admin/help" className={`nav-item ${pathname.startsWith("/admin/help") ? "nav-item-active" : ""}`}><CircleHelp size={18} /><span>Help center</span></Link>
         </nav>
         <div className="sidebar-footer"><div className="status-callout"><span className="live-pulse" /><div><strong>All systems ready</strong><small>Local demo environment</small></div></div><div className="user-card"><div className="user-avatar">{initials(user.name)}</div><div className="user-details"><strong>{user.name}</strong><small>{roleLabel(user.role)}</small></div><LogoutButton /></div></div>

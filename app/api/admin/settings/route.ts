@@ -23,6 +23,7 @@ const settingsSchema = z.object({
   description: z.string().trim().max(1000),
   logoUrl: optionalUrl,
   logoAlt: z.string().trim().max(180),
+  faviconUrl: optionalUrl,
   primaryEmail: z.string().trim().max(254).email().or(z.literal("")),
   supportEmail: z.string().trim().max(254).email().or(z.literal("")),
   phone: z.string().trim().max(40),

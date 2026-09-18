@@ -25,6 +25,7 @@ export function SiteSettingsForm({ settings }: { settings: SiteSettings }) {
   const [form, setForm] = useState<EditableSettings>(() => ({
     displayName: settings.displayName, legalName: settings.legalName, tagline: settings.tagline, description: settings.description,
     logoUrl: settings.logoUrl, logoAlt: settings.logoAlt, primaryEmail: settings.primaryEmail, supportEmail: settings.supportEmail,
+    faviconUrl: settings.faviconUrl,
     phone: settings.phone, addressLine1: settings.addressLine1, addressLine2: settings.addressLine2, city: settings.city,
     region: settings.region, postalCode: settings.postalCode, country: settings.country, websiteUrl: settings.websiteUrl,
     timezone: settings.timezone, currency: settings.currency, supportUrl: settings.supportUrl, privacyUrl: settings.privacyUrl,
@@ -68,7 +69,8 @@ export function SiteSettingsForm({ settings }: { settings: SiteSettings }) {
           <div className="form-row">{fields.slice(4, 6).map((field) => <div className="field" key={field.name}><label htmlFor={`site-settings-${field.name}`}>{field.label}</label><input id={`site-settings-${field.name}`} type={field.type ?? "text"} value={form[field.name] as string} onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder} /></div>)}</div>
           <div className="form-row">{fields.slice(6, 8).map((field) => <div className="field" key={field.name}><label htmlFor={`site-settings-${field.name}`}>{field.label}</label><input id={`site-settings-${field.name}`} type={field.type ?? "text"} value={form[field.name] as string} onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder} /></div>)}</div>
           {fields.slice(8).map((field) => <div className="field" key={field.name}><label htmlFor={`site-settings-${field.name}`}>{field.label}</label><input id={`site-settings-${field.name}`} type={field.type ?? "text"} value={form[field.name] as string} onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder} /></div>)}
-          <small>Logo URLs may point to a public asset such as an uploaded CDN file or a file in the application’s public folder. File-upload storage can be connected later.</small>
+          <div className="form-row"><div className="field"><label htmlFor="site-settings-faviconUrl">Favicon URL</label><input id="site-settings-faviconUrl" type="url" value={form.faviconUrl} onChange={(event) => update("faviconUrl", event.target.value)} placeholder="/media/favicon.png" /></div><div className="field"><span className="field-label">Brand preview</span><div className="site-settings-logo-preview">{form.logoUrl ? <img src={form.logoUrl} alt={form.logoAlt || "Logo preview"} /> : <span className="brand-mark" aria-hidden="true">WS</span>}<span>{form.displayName || "Your site name"}</span></div></div></div>
+          <small>Logo and favicon URLs may point to a reusable item from the Media Library or a file in the application’s public folder. Uploads are stored locally for development and should move behind durable object storage before production.</small>
         </section>
 
         <section className="settings-form-section" aria-labelledby="settings-contact-title">

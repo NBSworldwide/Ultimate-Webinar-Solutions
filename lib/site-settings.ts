@@ -14,6 +14,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   description: "A standalone workspace for planning, publishing, and operating live webinar sessions.",
   logoUrl: "",
   logoAlt: "",
+  faviconUrl: "",
   primaryEmail: "",
   supportEmail: "",
   phone: "",
@@ -47,6 +48,7 @@ type SiteSettingsRow = DatabaseRow & {
   description: string;
   logo_url: string;
   logo_alt: string;
+  favicon_url: string;
   primary_email: string;
   support_email: string;
   phone: string;
@@ -81,6 +83,7 @@ function toSiteSettings(row: SiteSettingsRow): SiteSettings {
     description: row.description,
     logoUrl: row.logo_url,
     logoAlt: row.logo_alt,
+    faviconUrl: row.favicon_url,
     primaryEmail: row.primary_email,
     supportEmail: row.support_email,
     phone: row.phone,
@@ -107,7 +110,7 @@ function toSiteSettings(row: SiteSettingsRow): SiteSettings {
   };
 }
 
-const settingsFields = `id, display_name, legal_name, tagline, description, logo_url, logo_alt,
+const settingsFields = `id, display_name, legal_name, tagline, description, logo_url, logo_alt, favicon_url,
   primary_email, support_email, phone, address_line1, address_line2, city, region, postal_code,
   country, website_url, timezone, currency, support_url, privacy_url, terms_url,
   shipping_policy_url, business_hours, linkedin_url, facebook_url, instagram_url, age_gate_enabled, updated_by, updated_at`;
@@ -149,7 +152,7 @@ export async function updateSiteSettings(input: SiteSettingsInput, actorId: stri
   const now = new Date().toISOString();
   const values = [
     normalized(input.displayName), normalized(input.legalName), normalized(input.tagline), normalized(input.description),
-    normalized(input.logoUrl), normalized(input.logoAlt), normalized(input.primaryEmail).toLowerCase(), normalized(input.supportEmail).toLowerCase(), normalized(input.phone),
+    normalized(input.logoUrl), normalized(input.logoAlt), normalized(input.faviconUrl), normalized(input.primaryEmail).toLowerCase(), normalized(input.supportEmail).toLowerCase(), normalized(input.phone),
     normalized(input.addressLine1), normalized(input.addressLine2), normalized(input.city), normalized(input.region), normalized(input.postalCode), normalized(input.country).toUpperCase(),
     normalized(input.websiteUrl), normalized(input.timezone), normalized(input.currency).toUpperCase(), normalized(input.supportUrl), normalized(input.privacyUrl), normalized(input.termsUrl),
     normalized(input.shippingPolicyUrl), normalized(input.businessHours), normalized(input.linkedinUrl), normalized(input.facebookUrl), normalized(input.instagramUrl), input.ageGateEnabled ?? false,
@@ -160,12 +163,12 @@ export async function updateSiteSettings(input: SiteSettingsInput, actorId: stri
     await client.query("BEGIN");
     await client.query(`
       UPDATE site_settings SET
-        display_name = $1, legal_name = $2, tagline = $3, description = $4, logo_url = $5, logo_alt = $6,
-        primary_email = $7, support_email = $8, phone = $9, address_line1 = $10, address_line2 = $11,
-        city = $12, region = $13, postal_code = $14, country = $15, website_url = $16, timezone = $17,
-        currency = $18, support_url = $19, privacy_url = $20, terms_url = $21, shipping_policy_url = $22,
-        business_hours = $23, linkedin_url = $24, facebook_url = $25, instagram_url = $26,
-        age_gate_enabled = $27, updated_by = $28, updated_at = $29
+        display_name = $1, legal_name = $2, tagline = $3, description = $4, logo_url = $5, logo_alt = $6, favicon_url = $7,
+        primary_email = $8, support_email = $9, phone = $10, address_line1 = $11, address_line2 = $12,
+        city = $13, region = $14, postal_code = $15, country = $16, website_url = $17, timezone = $18,
+        currency = $19, support_url = $20, privacy_url = $21, terms_url = $22, shipping_policy_url = $23,
+        business_hours = $24, linkedin_url = $25, facebook_url = $26, instagram_url = $27,
+        age_gate_enabled = $28, updated_by = $29, updated_at = $30
       WHERE id = 'default'
     `, [...values, actorId, now]);
     await client.query(

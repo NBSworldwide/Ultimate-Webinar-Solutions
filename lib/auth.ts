@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { assertStandaloneDataset, getDb } from "@/lib/db";
+import { assertStandaloneDataset, getDb, type DatabaseClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import type { Role, User } from "@/lib/types";
 import { validateUsername } from "@/lib/username";
@@ -26,7 +26,13 @@ export function safeReturnPath(value: string | null | undefined, fallback: strin
   return value;
 }
 
-function hashToken(value: string): string {
+/** Administrators always enter the management area after signing in. */
+export function getLoginRedirectPath(returnTo: string | null | undefined, isAdministrator: boolean): string {
+  return isAdministrator ? "/admin" : safeReturnPath(returnTo, "/account");
+}
+
+/** Hash a short-lived security token before it is stored in the database. */
+export function hashToken(value: string): string {
   const secret = process.env.SESSION_SECRET;
   if (process.env.NODE_ENV === "production" && (!secret || secret.length < 32)) {
     throw new Error("SESSION_SECRET must be at least 32 characters in production.");
@@ -121,4 +127,14 @@ export async function destroyCurrentSession(): Promise<void> {
     await assertStandaloneDataset();
     await getDb().query("DELETE FROM sessions WHERE token_hash = $1", [hashToken(token)]);
   }
+}
+
+/** Invalidate every browser session after a password or email security change. */
+export async function destroyAllUserSessions(userId: string, client?: DatabaseClient): Promise<void> {
+  if (client) {
+    await client.query("DELETE FROM sessions WHERE user_id = $1", [userId]);
+    return;
+  }
+  await assertStandaloneDataset();
+  await getDb().query("DELETE FROM sessions WHERE user_id = $1", [userId]);
 }

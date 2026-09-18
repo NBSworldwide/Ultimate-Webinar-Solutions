@@ -12,12 +12,16 @@ const pageSchema = z.object({
   title: z.string().trim().min(2).max(140),
   excerpt: z.string().trim().max(500).default(""),
   status: z.enum(["draft", "published", "archived"]),
+  isHomepage: z.boolean().default(false),
   blocks: z.unknown(),
   seoTitle: z.string().trim().max(160).default(""),
   seoDescription: z.string().trim().max(300).default(""),
 });
 
 function revalidatePagePaths(slug: string): void {
+  revalidatePath("/");
+  revalidatePath("/products");
+  revalidatePath("/locations");
   revalidatePath("/pages");
   revalidatePath(`/pages/${slug}`);
   revalidatePath("/admin/pages");

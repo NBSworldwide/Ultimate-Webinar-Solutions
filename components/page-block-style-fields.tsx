@@ -49,15 +49,17 @@ function NumberControl({ id, label, value, onChange, min, max, step = 1, unit = 
   </label>;
 }
 
-function EdgeControls({ title, group, device, edgeValue, setEdges }: {
+function EdgeControls({ title, group, device, linked, onToggleLink, edgeValue, setEdges }: {
   title: string;
   group: EdgeGroup;
   device: PageStyleDevice;
+  linked: boolean;
+  onToggleLink: () => void;
   edgeValue: (group: EdgeGroup, edge: EdgeName) => string;
   setEdges: (group: EdgeGroup, edge: EdgeName, value: string) => void;
 }) {
   return <div className="page-style-edges">
-    <div className="page-style-subheading"><strong>{title}</strong><span>{device === "desktop" ? "Desktop values" : "Device override"}</span></div>
+    <div className="page-style-subheading"><strong>{title}</strong><span>{device === "desktop" ? "Desktop values" : "Device override"}<button type="button" className={`page-style-link-toggle ${linked ? "is-active" : ""}`} aria-pressed={linked} aria-label={`${linked ? "Unlink" : "Link"} ${title.toLowerCase()} values`} title={`${linked ? "Unlink" : "Link"} values`} onClick={onToggleLink}>⛓</button></span></div>
     <div className="page-style-edge-grid">
       {edgeNames.map(({ key, label }) => <NumberControl
         key={key}
@@ -79,6 +81,7 @@ export function PageBlockStyleFields({ block, onChange }: {
   const [device, setDevice] = useState<PageStyleDevice>("desktop");
   const style = block.style ?? {};
   const baseId = `page-style-${block.id}`;
+  const [linkedEdges, setLinkedEdges] = useState<Record<EdgeGroup, boolean>>({ margin: false, padding: false, borderWidth: false, borderRadius: false });
 
   function update(next: PageBlockStyle) {
     onChange(next);
@@ -99,12 +102,30 @@ export function PageBlockStyleFields({ block, onChange }: {
     const current = key === "border" ? style.border?.[property] : style[key];
     const values = { ...((current as PageStyleBox | undefined) ?? {}) };
     const nextEdges = { ...(values[device] ?? {}) };
-    if (value === undefined || !Number.isFinite(value)) delete nextEdges[edge];
+    if (linkedEdges[group]) {
+      for (const edgeName of edgeNames.map((item) => item.key)) {
+        if (value === undefined || !Number.isFinite(value)) delete nextEdges[edgeName];
+        else nextEdges[edgeName] = value;
+      }
+    } else if (value === undefined || !Number.isFinite(value)) delete nextEdges[edge];
     else nextEdges[edge] = value;
     if (Object.keys(nextEdges).length > 0) values[device] = nextEdges;
     else delete values[device];
     if (key === "border") update({ ...style, border: { ...style.border, [property]: Object.keys(values).length > 0 ? values : undefined } });
     else update({ ...style, [key]: Object.keys(values).length > 0 ? values : undefined });
+  }
+
+  function toggleEdges(group: EdgeGroup) {
+    const nextLinked = !linkedEdges[group];
+    setLinkedEdges((current) => ({ ...current, [group]: nextLinked }));
+    if (!nextLinked) return;
+    const key = group === "margin" ? "margin" : group === "padding" ? "padding" : "border";
+    const property = group === "borderWidth" ? "width" : "radius";
+    const current = key === "border" ? style.border?.[property] : style[key];
+    const values = { ...((current as PageStyleBox | undefined) ?? {}) };
+    values[device] = { top: 0, right: 0, bottom: 0, left: 0 };
+    if (key === "border") update({ ...style, border: { ...style.border, [property]: values } });
+    else update({ ...style, [key]: values });
   }
 
   function edgeValue(group: EdgeGroup, edge: EdgeName): string {
@@ -139,6 +160,10 @@ export function PageBlockStyleFields({ block, onChange }: {
     update({ ...style, border: { ...style.border, shadow: { ...style.border?.shadow, [key]: value === "" ? undefined : value } } });
   }
 
+  function setMask(key: string, value: boolean | string | undefined) {
+    update({ ...style, mask: { ...style.mask, [key]: value === "" ? undefined : value } });
+  }
+
   return <details className="page-block-style-panel" open>
     <summary>Style and responsive controls</summary>
     <div className="page-style-panel-body">
@@ -160,8 +185,8 @@ export function PageBlockStyleFields({ block, onChange }: {
           <label className="field"><span>Position</span><select value={style.position ?? "default"} onChange={(event) => update({ ...style, position: event.target.value as PageBlockStyle["position"] })}><option value="default">Default</option><option value="relative">Relative</option><option value="absolute">Absolute</option><option value="fixed">Fixed</option></select></label>
           <NumberControl id={`${baseId}-z-index`} label="Z-index" value={numberText(style.zIndex)} min={-1_000} max={10_000} onChange={(value) => update({ ...style, zIndex: value === "" ? undefined : Number(value) })} unit="" />
         </div>
-        <EdgeControls title="Margin" group="margin" device={device} edgeValue={edgeValue} setEdges={setEdges} />
-        <EdgeControls title="Padding" group="padding" device={device} edgeValue={edgeValue} setEdges={setEdges} />
+        <EdgeControls title="Margin" group="margin" device={device} linked={linkedEdges.margin} onToggleLink={() => toggleEdges("margin")} edgeValue={edgeValue} setEdges={setEdges} />
+        <EdgeControls title="Padding" group="padding" device={device} linked={linkedEdges.padding} onToggleLink={() => toggleEdges("padding")} edgeValue={edgeValue} setEdges={setEdges} />
       </details>
 
       <details className="page-style-group">
@@ -204,9 +229,16 @@ export function PageBlockStyleFields({ block, onChange }: {
       <details className="page-style-group">
         <summary>Border and shadow</summary>
         <div className="page-style-grid"><label className="field"><span>Border type</span><select value={style.border?.type ?? "default"} onChange={(event) => update({ ...style, border: { ...style.border, type: event.target.value as PageStyleBorderType } })}><option value="default">Default</option><option value="none">None</option><option value="solid">Solid</option><option value="double">Double</option><option value="dotted">Dotted</option><option value="dashed">Dashed</option><option value="groove">Groove</option></select></label><div className="page-style-color-row"><label className="page-style-color"><span>Border color</span><input type="color" value={colorText(style.border?.color, "#cbe5dd")} onChange={(event) => update({ ...style, border: { ...style.border, color: event.target.value } })} /></label><button type="button" className="button button-secondary button-small" onClick={() => update({ ...style, border: { ...style.border, color: undefined } })}>Clear</button></div></div>
-        <EdgeControls title="Border width" group="borderWidth" device={device} edgeValue={edgeValue} setEdges={setEdges} />
-        <EdgeControls title="Border radius" group="borderRadius" device={device} edgeValue={edgeValue} setEdges={setEdges} />
+        <EdgeControls title="Border width" group="borderWidth" device={device} linked={linkedEdges.borderWidth} onToggleLink={() => toggleEdges("borderWidth")} edgeValue={edgeValue} setEdges={setEdges} />
+        <EdgeControls title="Border radius" group="borderRadius" device={device} linked={linkedEdges.borderRadius} onToggleLink={() => toggleEdges("borderRadius")} edgeValue={edgeValue} setEdges={setEdges} />
         <div className="page-style-subgroup"><div className="page-style-color-row"><label className="page-style-color"><span>Shadow color</span><input type="color" value={colorText(style.border?.shadow?.color, "#183b36")} onChange={(event) => setShadow("color", event.target.value)} /></label><button type="button" className="button button-secondary button-small" onClick={() => update({ ...style, border: { ...style.border, shadow: undefined } })}>Clear shadow</button></div><div className="page-style-grid"><NumberControl id={`${baseId}-shadow-horizontal`} label="Horizontal" value={numberText(style.border?.shadow?.horizontal)} min={-200} max={300} onChange={(value) => setShadow("horizontal", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-vertical`} label="Vertical" value={numberText(style.border?.shadow?.vertical)} min={-200} max={300} onChange={(value) => setShadow("vertical", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-blur`} label="Blur" value={numberText(style.border?.shadow?.blur)} min={0} max={300} onChange={(value) => setShadow("blur", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-spread`} label="Spread" value={numberText(style.border?.shadow?.spread)} min={-200} max={300} onChange={(value) => setShadow("spread", value === "" ? undefined : Number(value))} /><label className="field"><span>Shadow position</span><select value={style.border?.shadow?.position ?? "outline"} onChange={(event) => setShadow("position", event.target.value)}><option value="outline">Outline</option><option value="inset">Inset</option></select></label></div></div>
+      </details>
+
+      <details className="page-style-group">
+        <summary>Mask</summary>
+        <div className="page-style-grid"><label className="field"><span>Mask</span><select value={style.mask?.enabled ? "on" : "off"} onChange={(event) => setMask("enabled", event.target.value === "on")}><option value="off">Off</option><option value="on">On</option></select></label>{style.mask?.enabled ? <label className="field"><span>Shape</span><select value={style.mask.shape ?? "circle"} onChange={(event) => setMask("shape", event.target.value)}><option value="circle">Circle</option><option value="oval">Oval</option><option value="pill">Pill horizontal</option><option value="pill-vertical">Pill vertical</option><option value="triangle">Triangle</option><option value="diamond">Diamond</option><option value="hexagon">Hexagon</option><option value="blob">Blob</option><option value="custom">Custom image or SVG</option></select></label> : null}</div>
+        {style.mask?.enabled && style.mask.shape === "custom" ? <label className="field"><span>Mask image or SVG URL</span><input type="url" value={style.mask.image ?? ""} onChange={(event) => setMask("image", event.target.value)} placeholder="https://images.example.com/mask.svg" /></label> : null}
+        <p className="page-style-help">Masks are applied to the selected block without changing its layout box.</p>
       </details>
 
       <button type="button" className="button button-secondary button-small page-style-reset" onClick={() => onChange(undefined)}>Reset block styling</button>

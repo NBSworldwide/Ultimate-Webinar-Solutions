@@ -3,12 +3,27 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import type { DatabaseClient, DatabasePool, DatabaseRow, QueryResult } from "@/lib/db";
 import { hasCapability } from "@/lib/authorization";
+import type { NavigationMenuView } from "@/lib/navigation";
 
 test("page-builder HTML is sanitized while useful formatting and media remain", async () => {
   const { sanitizeHtml } = await import("@/lib/sanitize-html");
   const sanitized = sanitizeHtml('<p onclick="alert(1)"><u>Safe copy</u><img src="https://images.example.test/demo.jpg" alt="Demo" /></p><script>alert(2)</script><iframe src="https://evil.example.test/embed"></iframe>');
   assert.match(sanitized, /<p><u>Safe copy<\/u><img src="https:\/\/images\.example\.test\/demo\.jpg" alt="Demo" \/><\/p>/);
   assert.doesNotMatch(sanitized, /onclick|script|evil\.example/);
+});
+
+test("page normalization keeps every top-level widget inside a container", async () => {
+  const { normalizePageBlocks } = await import("@/lib/pages");
+  const blocks = normalizePageBlocks([
+    { id: "legacy-hero", type: "hero", data: { heading: "Legacy hero" } },
+    { id: "legacy-copy", type: "rich_text", data: { heading: "Legacy copy" } },
+    { id: "existing-container", type: "container", data: {}, children: [{ id: "nested-widget", type: "spacer", data: { height: 24 } }] },
+  ]);
+
+  assert.deepEqual(blocks.map((block) => block.type), ["container", "container"]);
+  assert.deepEqual(blocks[0]?.children?.map((block) => block.id), ["legacy-hero", "legacy-copy"]);
+  assert.equal(blocks[0]?.layout?.contentWidth, "full");
+  assert.equal(blocks[1]?.children?.[0]?.id, "nested-widget");
 });
 
 test("role capabilities keep administrator, manager, and customer boundaries distinct", () => {
@@ -34,6 +49,36 @@ test("role capabilities keep administrator, manager, and customer boundaries dis
   assert.equal(hasCapability(customer, "orders.manage"), false);
 });
 
+test("administrator login redirects to the backend while attendee return paths stay safe", async () => {
+  const { getLoginRedirectPath } = await import("@/lib/auth");
+
+  assert.equal(getLoginRedirectPath("/account", true), "/admin");
+  assert.equal(getLoginRedirectPath("/webinars/example", true), "/admin");
+  assert.equal(getLoginRedirectPath("/webinars/example", false), "/webinars/example");
+  assert.equal(getLoginRedirectPath("https://evil.example.test", false), "/account");
+  assert.equal(getLoginRedirectPath("//evil.example.test", false), "/account");
+});
+
+test("navigation menu ordering keeps the stable primary menu first", async () => {
+  const { orderNavigationMenus } = await import("@/lib/navigation");
+  const menu = (id: string, slug: string, name: string): NavigationMenuView => ({
+    id,
+    slug,
+    name,
+    locations: ["footer"],
+    autoAddPublishedPages: false,
+    items: [],
+    updatedAt: "2026-09-17T00:00:00.000Z",
+  });
+
+  const ordered = orderNavigationMenus([
+    menu("navigation-menu-footer", "footer-navigation", "Footer navigation"),
+    menu("navigation-menu-primary", "primary-navigation", "Primary navigation"),
+  ]);
+
+  assert.deepEqual(ordered.map(({ slug }) => slug), ["primary-navigation", "footer-navigation"]);
+});
+
 test("Google Maps blocks accept addresses and range-checked coordinates", async () => {
   const { hasMapCoordinateInput, normalizeMapLocation } = await import("@/lib/map-location");
   const address = normalizeMapLocation({ locationMode: "address", address: " 123 Main Street, Arlington, TX 76014 ", zoom: 10 });
@@ -43,6 +88,46 @@ test("Google Maps blocks accept addresses and range-checked coordinates", async 
   assert.equal(hasMapCoordinateInput(coordinates), true);
   assert.deepEqual(normalizeMapLocation(coordinates), { mode: "coordinates", query: "32.7357,-97.1081", label: "32.7357,-97.1081", latitude: 32.7357, longitude: -97.1081 });
   assert.equal(normalizeMapLocation({ locationMode: "coordinates", latitude: "91", longitude: "-97.1081" }), null);
+});
+
+test("studio appearance and media inputs stay within safe local bounds", async () => {
+  const { sanitizeCustomCss, validateAppearanceSettings } = await import("@/lib/appearance");
+  const { validateMediaAssetInput } = await import("@/lib/media");
+  const css = sanitizeCustomCss("<style>@import url(https://tracker.example); .card { color: red; background: url(javascript:alert(1)); }</style>");
+  assert.doesNotMatch(css, /style|@import|javascript:/i);
+  assert.match(css, /\.card\s*\{/);
+  assert.equal(validateAppearanceSettings({
+    contentWidth: 1180, containerPadding: 24, columnGap: 24, rowGap: 24, pageTitleSelector: "h1", stretchSections: true,
+    defaultPageLayout: "full_width", breakpoints: { widescreen: 1600, desktop: 1200, laptop: 1024, tablet: 768, mobile: 480 }, customCss: css,
+  }).customCss, css);
+  assert.throws(() => validateAppearanceSettings({
+    contentWidth: 900, containerPadding: 24, columnGap: 24, rowGap: 24, pageTitleSelector: "h1", stretchSections: true,
+    defaultPageLayout: "full_width", breakpoints: { widescreen: 1600, desktop: 1200, laptop: 1024, tablet: 768, mobile: 480 }, customCss: "",
+  }), /between 960 and 1600/);
+  assert.equal(validateMediaAssetInput({ fileName: "cover.svg", storageKey: "cover.svg", url: "/media/cover.svg", mimeType: "image/svg+xml", fileSize: 100 }).url, "/media/cover.svg");
+  assert.throws(() => validateMediaAssetInput({ fileName: "unsafe", storageKey: "../unsafe", url: "https://cdn.example.test/image.png", mimeType: "image/png", fileSize: 100 }), /safe local media URL/);
+});
+
+test("form normalization creates stable, validated builder data", async () => {
+  const { normalizeFormInput } = await import("@/lib/forms");
+  const form = normalizeFormInput({
+    name: "  Session Intake  ", slug: "", description: "A synthetic intake form.", tags: ["demo"], status: "draft",
+    submitButtonText: "Send", submittingText: "Sending…", settings: { enableConditionalLogic: true, storeSpamEntries: true, minimumSubmitSeconds: 999, countryFilter: ["us", "usa"], keywordFilter: ["demo"], captchaProvider: "none", aiEnabled: false },
+    fields: [
+      { fieldType: "email", fieldId: "contact", label: "Email", isRequired: true },
+      { fieldType: "text", fieldId: "contact", label: "Name", isRequired: true },
+      { fieldType: "rich_text", fieldId: "intro", label: "Intro", settings: { content: "<p>Safe</p><script>bad</script>" } },
+    ],
+    notifications: [], confirmation: { confirmationType: "message", messageHtml: "<p>Thanks</p><script>bad</script>" },
+  }, "form-normalization-test");
+  assert.equal(form.formId, "form-normalization-test");
+  assert.equal(form.slug, "session-intake");
+  assert.deepEqual(form.fields.map((field) => field.fieldId), ["contact", "contact_2", "intro"]);
+  assert.equal(form.settings.minimumSubmitSeconds, 600);
+  assert.deepEqual(form.settings.countryFilter, ["US"]);
+  assert.equal(form.notifications.length, 1);
+  assert.doesNotMatch(form.fields[2]?.settings.content as string, /script/);
+  assert.doesNotMatch(form.confirmation.messageHtml, /script/);
 });
 
 test("standalone webinar domain keeps inventory, registrations, and attendee access consistent", async () => {
@@ -63,12 +148,20 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const { getDb, setTestDatabase } = await import("@/lib/db");
     setTestDatabase(pool);
     const { runMigrations } = await import("@/lib/migrations");
-    const { seedSyntheticSamples } = await import("@/lib/sample-seed");
+    const { seedStudioSamples, seedSyntheticSamples } = await import("@/lib/sample-seed");
     await runMigrations(getDb());
     assert.deepEqual(await runMigrations(getDb()), []);
     const seeded = await seedSyntheticSamples();
     assert.deepEqual(seeded, { webinars: 3, registrations: 5, alreadySeeded: false });
     assert.deepEqual(await seedSyntheticSamples(), { webinars: 3, registrations: 5, alreadySeeded: true });
+    assert.deepEqual(await seedStudioSamples(), { forms: 2, media: 2, entries: 3, alreadySeeded: false });
+    assert.deepEqual(await seedStudioSamples(), { forms: 2, media: 2, entries: 3, alreadySeeded: true });
+    const { getFormEntries, getPublishedFormBySlug, submitForm } = await import("@/lib/forms");
+    const publishedStudioForm = await getPublishedFormBySlug("session-request");
+    assert.equal(publishedStudioForm?.name, "Session request");
+    const studioSubmission = await submitForm("session-request", { name: "New Synthetic Attendee", email: "new.attendee@webinar.local", topic: "operations", message: "A local test submission.", consent: true }, { startedAt: Date.now() - 10_000, country: "US" });
+    assert.equal(studioSubmission.spam, false);
+    assert.equal((await getFormEntries("form-session-request")).total, 4);
 
     const { seedDemoUsers } = await import("@/lib/demo-users");
     const { getEmailOutbox } = await import("@/lib/email");
@@ -139,7 +232,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal(defaultSiteSettings.displayName, "Webinar Studio");
     const savedSiteSettings = await updateSiteSettings({
       displayName: "Demo Operations Co.", legalName: "Demo Operations Co. LLC", tagline: "Practical live learning for modern teams.", description: "A synthetic company profile used to verify reusable site identity settings.",
-      logoUrl: "/demo-logo.svg", logoAlt: "Demo Operations Co.", primaryEmail: "hello@example.test", supportEmail: "support@example.test", phone: "+1 555 010 0142",
+      logoUrl: "/demo-logo.svg", logoAlt: "Demo Operations Co.", faviconUrl: "", primaryEmail: "hello@example.test", supportEmail: "support@example.test", phone: "+1 555 010 0142",
       addressLine1: "100 Demo Way", addressLine2: "Suite 200", city: "Arlington", region: "TX", postalCode: "76014", country: "US", websiteUrl: "https://example.test",
       timezone: "America/Chicago", currency: "USD", supportUrl: "https://example.test/support", privacyUrl: "https://example.test/privacy", termsUrl: "https://example.test/terms", shippingPolicyUrl: "https://example.test/shipping", businessHours: "Monday-Friday, 9 AM-5 PM Central",
       linkedinUrl: "https://linkedin.com/company/example", facebookUrl: "", instagramUrl: "https://instagram.com/example",
@@ -168,8 +261,14 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const { createPage, deletePage, getPages, getPublishedPageBySlug, updatePage } = await import("@/lib/pages");
     const { createNavigationMenu, getNavigationMenu, getNavigationMenus, updateNavigationMenu } = await import("@/lib/navigation");
     const samplePages = await getPages({ status: "published" });
-    assert.equal(samplePages.length, 2);
+    assert.equal(samplePages.length, 8);
+    assert.equal((await getPublishedPageBySlug("home"))?.title, "Webinar Studio");
     assert.equal((await getPublishedPageBySlug("about-webinar-studio"))?.title, "About Webinar Studio");
+    assert.equal((await getPublishedPageBySlug("service-locations"))?.title, "Service locations");
+    assert.equal((await getPublishedPageBySlug("products"))?.title, "Shop");
+    const chicagoPage = await getPublishedPageBySlug("location-chicago-il");
+    assert.equal(chicagoPage?.blocks[0]?.type, "container");
+    assert.equal(chicagoPage?.blocks[0]?.children?.[0]?.type, "location_detail");
     const primaryMenu = (await getNavigationMenus()).find((menu) => menu.slug === "primary-navigation");
     assert.ok(primaryMenu);
     assert.equal(primaryMenu.autoAddPublishedPages, true);
@@ -188,6 +287,13 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     assert.equal((await getPublishedPageBySlug(editablePage.slug))?.blocks.length, 2);
     const publishedMenu = await getNavigationMenu(primaryMenu.id);
     assert.ok(publishedMenu?.items.some((item) => item.itemType === "page" && item.entityId === editablePage.id && item.href === `/pages/${editablePage.slug}` && item.isVisible));
+    const homepagePage = await updatePage(editablePage.id, {
+      slug: publishedPage.slug, title: publishedPage.title, excerpt: publishedPage.excerpt, status: "published", isHomepage: true,
+      blocks: publishedPage.blocks, seoTitle: publishedPage.seoTitle, seoDescription: publishedPage.seoDescription,
+    }, "user_test_admin");
+    assert.equal(homepagePage.isHomepage, true);
+    const exclusiveHomepages = await getDb().query<{ id: string }>("SELECT id FROM content_pages WHERE is_homepage = TRUE");
+    assert.deepEqual(exclusiveHomepages.rows.map(({ id }) => id), [editablePage.id]);
     const archivedPage = await updatePage(editablePage.id, { slug: editablePage.slug, title: editablePage.title, excerpt: editablePage.excerpt, status: "archived", blocks: publishedPage.blocks, seoTitle: publishedPage.seoTitle, seoDescription: publishedPage.seoDescription }, "user_test_admin");
     assert.equal(archivedPage.status, "archived");
     const archivedMenu = await getNavigationMenu(primaryMenu.id);
@@ -457,7 +563,7 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
     const { getCrmContact, updateCrmContact } = await import("@/lib/crm");
     const { getSmsOutbox, getSmsTemplates, normalizeSmsPhone, processDueSms, renderSmsTemplate } = await import("@/lib/sms");
     const { getEmailSequences, getEmailTemplateRevisions, getEmailTemplates, renderEmailTemplate, updateEmailSequence, updateEmailTemplate } = await import("@/lib/email");
-    assert.equal((await getEmailTemplates()).length, 11);
+    assert.equal((await getEmailTemplates()).length, 18);
     assert.equal((await getEmailSequences()).length, 2);
     const freeContact = await getCrmContact("crm-contact-667265652e7075626c6963406578616d706c652e74657374");
     assert.ok(freeContact);

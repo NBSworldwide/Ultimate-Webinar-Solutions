@@ -2,7 +2,7 @@ import type { ThemeSettingsValues } from "@/lib/theme-presets";
 
 export type Role = "admin" | "manager" | "attendee";
 export type PageStatus = "draft" | "published" | "archived";
-export type PageBlockType = "hero" | "rich_text" | "image" | "image_box" | "icon_box" | "button" | "cta" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid" | "navigation_menu" | "html" | "map" | "spacer" | "container";
+export type PageBlockType = "hero" | "heading" | "rich_text" | "image" | "image_box" | "icon_box" | "video" | "button" | "cta" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid" | "navigation_menu" | "form" | "location_index" | "location_detail" | "html" | "map" | "spacer" | "container";
 export type WebinarStatus = "draft" | "published" | "sold_out" | "completed";
 export type WebinarVisibility = "public" | "private";
 export type { EmailProvider, StreamingProvider } from "@/lib/integration-catalog";
@@ -38,6 +38,30 @@ export interface User {
   role: Role;
 }
 
+export interface AccountProfile extends User {
+  phone: string;
+  mobilePhone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface AccountProfileInput {
+  name: string;
+  email: string;
+  phone: string;
+  mobilePhone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}
+
 export type TeamRoleChangeRequestStatus = "pending" | "approved" | "denied" | "cancelled";
 
 export interface TeamRoleChangeRequestView {
@@ -66,6 +90,7 @@ export interface SiteSettings {
   description: string;
   logoUrl: string;
   logoAlt: string;
+  faviconUrl: string;
   primaryEmail: string;
   supportEmail: string;
   phone: string;
@@ -97,6 +122,215 @@ export type ThemeSettings = ThemeSettingsValues & {
   updatedAt: string;
 };
 
+export type FormStatus = "draft" | "published" | "archived";
+export type FormFieldType = "text" | "textarea" | "select" | "radio" | "checkbox" | "number" | "name" | "email" | "range" | "captcha" | "consent" | "phone" | "datetime" | "address" | "map" | "url" | "layout" | "page_break" | "divider" | "rich_text" | "html" | "signature" | "hidden";
+export type FormConfirmationType = "message" | "page" | "url";
+export type FormEntryPaymentStatus = "none" | "pending" | "paid" | "refunded";
+export type FormEntryFilter = "all" | "unread" | "starred" | "spam" | "trash" | "payments";
+export type FormMailerProvider = "native" | "smtp" | "brevo" | "mailjet" | "sendgrid" | "gmail" | "resend" | "mailgun" | "ses" | "postmark";
+
+export interface AppearanceSettings {
+  id: string;
+  contentWidth: number;
+  containerPadding: number;
+  columnGap: number;
+  rowGap: number;
+  pageTitleSelector: string;
+  stretchSections: boolean;
+  defaultPageLayout: "full_width" | "boxed";
+  breakpoints: Record<string, number>;
+  customCss: string;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+export interface GlobalColorToken {
+  id: string;
+  tokenKey: string;
+  name: string;
+  value: string;
+  isSystem: boolean;
+  sortOrder: number;
+  updatedAt: string;
+}
+
+export interface GlobalTypographyToken {
+  id: string;
+  tokenKey: string;
+  name: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontSize: number;
+  lineHeight: number;
+  letterSpacing: number;
+  textTransform: "none" | "uppercase" | "lowercase" | "capitalize";
+  fontStyle: "normal" | "italic" | "oblique";
+  responsive: Record<string, { fontSize?: number; lineHeight?: number; letterSpacing?: number }>;
+  isSystem: boolean;
+  sortOrder: number;
+  updatedAt: string;
+}
+
+export interface MediaAsset {
+  id: string;
+  fileName: string;
+  storageKey: string;
+  url: string;
+  mimeType: string;
+  fileSize: number;
+  width: number | null;
+  height: number | null;
+  altText: string;
+  caption: string;
+  status: "active" | "trashed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface FormCondition {
+  fieldId: string;
+  operator: "equals" | "not_equals" | "contains" | "not_empty";
+  value: string;
+}
+
+export interface FormField {
+  id: string;
+  formId: string;
+  sortOrder: number;
+  fieldType: FormFieldType;
+  label: string;
+  description: string;
+  placeholder: string;
+  fieldId: string;
+  isRequired: boolean;
+  options: FormFieldOption[];
+  defaultValue: string;
+  validation: Record<string, string | number | boolean>;
+  conditional: FormCondition | null;
+  settings: Record<string, string | number | boolean>;
+}
+
+export interface FormNotification {
+  id: string;
+  formId: string;
+  sortOrder: number;
+  name: string;
+  enabled: boolean;
+  recipientEmails: string[];
+  subject: string;
+  fromName: string;
+  fromEmail: string;
+  replyTo: string;
+  messageHtml: string;
+  condition: FormCondition | null;
+  advanced: Record<string, string | number | boolean>;
+}
+
+export interface FormConfirmation {
+  id: string;
+  formId: string;
+  confirmationType: FormConfirmationType;
+  messageHtml: string;
+  pageUrl: string;
+  redirectUrl: string;
+  autoScroll: boolean;
+  entryPreview: boolean;
+}
+
+export interface FormSettings {
+  enableConditionalLogic: boolean;
+  storeSpamEntries: boolean;
+  minimumSubmitSeconds: number;
+  countryFilter: string[];
+  keywordFilter: string[];
+  captchaProvider: "none" | "built_in" | "recaptcha" | "hcaptcha" | "turnstile" | "custom";
+  aiEnabled: boolean;
+}
+
+export interface FormDefinition {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  tags: string[];
+  status: FormStatus;
+  submitButtonText: string;
+  submittingText: string;
+  settings: FormSettings;
+  fields: FormField[];
+  notifications: FormNotification[];
+  confirmation: FormConfirmation;
+  entryCount: number;
+  unreadCount: number;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface FormEntry {
+  id: string;
+  formId: string;
+  formName: string;
+  entryNumber: number;
+  values: Record<string, string | string[]>;
+  notes: string;
+  isRead: boolean;
+  isStarred: boolean;
+  isSpam: boolean;
+  trashedAt: string | null;
+  paymentStatus: FormEntryPaymentStatus;
+  ipAddress: string | null;
+  ipHash: string | null;
+  country: string | null;
+  userAgent: string | null;
+  referrer: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormEntryAuditEvent {
+  id: string;
+  action: string;
+  actorName: string | null;
+  metadata: Record<string, string | number | boolean>;
+  createdAt: string;
+}
+
+export interface FormEntryDelivery {
+  id: string;
+  notificationName: string | null;
+  provider: string;
+  recipientEmail: string;
+  status: "queued" | "sent" | "failed" | "skipped";
+  errorMessage: string | null;
+  attemptedAt: string | null;
+  createdAt: string;
+}
+
+export interface FormEntryDetail extends FormEntry {
+  fieldLabels: Record<string, string>;
+  audit: FormEntryAuditEvent[];
+  deliveries: FormEntryDelivery[];
+  previousId: string | null;
+  nextId: string | null;
+}
+
+export interface FormMailerSettings {
+  primaryProvider: FormMailerProvider;
+  backupProvider: FormMailerProvider | null;
+  fromName: string;
+  fromEmail: string;
+  forceFrom: boolean;
+  settings: Record<string, string | number | boolean>;
+  lastTestedAt: string | null;
+  savedSecrets: string[];
+  updatedAt: string;
+}
+
 export interface IntegrationSettingsView {
   streamingProvider: import("@/lib/integration-catalog").StreamingProvider | null;
   emailProvider: import("@/lib/integration-catalog").EmailProvider | null;
@@ -118,6 +352,8 @@ export interface PageBlock {
 
 export type PageContainerMode = "flex" | "grid";
 export type PageContainerContentWidth = "boxed" | "full";
+export type PageContainerSpacing = "global" | "custom";
+export type PageContainerMeasureUnit = "px" | "%" | "em" | "rem" | "vw" | "vh";
 export type PageContainerDirection = "row" | "column" | "row-reverse" | "column-reverse";
 export type PageContainerJustify = "start" | "center" | "end" | "space-between" | "space-around" | "space-evenly";
 export type PageContainerAlign = "start" | "center" | "end" | "stretch";
@@ -126,8 +362,11 @@ export type PageContainerWrap = "nowrap" | "wrap";
 export interface PageBlockLayout {
   mode?: PageContainerMode;
   contentWidth?: PageContainerContentWidth;
+  spacing?: PageContainerSpacing;
   width?: number;
+  widthUnit?: PageContainerMeasureUnit;
   minHeight?: number;
+  minHeightUnit?: PageContainerMeasureUnit;
   direction?: PageContainerDirection;
   justifyContent?: PageContainerJustify;
   alignItems?: PageContainerAlign;
@@ -148,6 +387,7 @@ export type PageStyleBox = Partial<Record<PageStyleDevice, PageStyleEdges>>;
 export type PageStyleBorderType = "default" | "none" | "solid" | "double" | "dotted" | "dashed" | "groove";
 export type PageStyleBackgroundMode = "none" | "classic" | "gradient";
 export type PageStyleGradientType = "linear" | "radial";
+export type PageStyleMaskShape = "circle" | "oval" | "pill" | "pill-vertical" | "triangle" | "diamond" | "hexagon" | "blob" | "custom";
 
 export interface PageBlockStyle {
   widthMode?: "default" | "full" | "inline" | "custom";
@@ -194,6 +434,7 @@ export interface PageBlockStyle {
     radius?: PageStyleBox;
     shadow?: { color?: string; horizontal?: number; vertical?: number; blur?: number; spread?: number; position?: "outline" | "inset"; };
   };
+  mask?: { enabled?: boolean; shape?: PageStyleMaskShape; image?: string; };
 }
 
 export interface ContentPage {
@@ -202,6 +443,7 @@ export interface ContentPage {
   title: string;
   excerpt: string;
   status: PageStatus;
+  isHomepage: boolean;
   blocks: PageBlock[];
   seoTitle: string;
   seoDescription: string;

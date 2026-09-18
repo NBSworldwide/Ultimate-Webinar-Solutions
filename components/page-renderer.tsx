@@ -1,13 +1,17 @@
 import Link from "next/link";
-import { CalendarDays, CheckCircle2, Gift, Globe2, Heart, ShieldCheck, Sparkles, Star, Trophy, Users, Video } from "lucide-react";
-import { createElement, type CSSProperties, type ComponentType, type ReactNode } from "react";
+import { ArrowUpRight, CalendarDays, CheckCircle2, Gift, Globe2, Heart, MapPin, ShieldCheck, Sparkles, Star, Trophy, Users, Video } from "lucide-react";
+import { Children, createElement, Fragment, type CSSProperties, type ComponentType, type ReactNode } from "react";
 import { PublicNavigation } from "@/components/public-navigation";
+import { FormRenderer } from "@/components/form-renderer";
+import { LocationDetailTemplate } from "@/components/location-detail-template";
+import { ProductCard, type ProductCardOptions } from "@/components/product-card";
 import type { NavigationMenuView } from "@/lib/navigation";
 import { pageBlockLayoutToCss, pageBlockStyleToCss } from "@/lib/page-styles";
 import { normalizeMapLocation } from "@/lib/map-location";
 import { formatMoney } from "@/lib/format";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import type { PageBlock, ProductListItem, TestimonialView } from "@/lib/types";
+import { serviceLocations, type ServiceLocation } from "@/content/locations";
+import type { FormDefinition, PageBlock, ProductListItem, TestimonialView } from "@/lib/types";
 
 function text(value: string | number | undefined): string { return typeof value === "string" ? value : ""; }
 
@@ -25,6 +29,29 @@ function safeImageSrc(value: string): string {
   return "";
 }
 
+function safeCustomCss(value: string): string {
+  return value.trim().slice(0, 6_000).replace(/<\/?style\b[^>]*>/gi, "").replace(/@import\s+[^;]+;?/gi, "").replace(/(?:expression|javascript)\s*:/gi, "");
+}
+
+function scopedCustomCss(value: string, selector: string): string {
+  const css = safeCustomCss(value);
+  if (!css) return "";
+  return css.replace(/(^|})\s*([^@{}][^{}]*)\{/g, (_match, prefix: string, selectors: string) => {
+    const scoped = selectors.split(",").map((item) => `${selector} ${item.trim()}`).join(", ");
+    return `${prefix}\n${scoped} {`;
+  });
+}
+
+type BlockVisibility = "all" | "desktop" | "tablet" | "mobile";
+
+function safeBlockId(value: string): string | undefined {
+  return /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value) ? value : undefined;
+}
+
+function blockVisibility(value: string): BlockVisibility {
+  return ["desktop", "tablet", "mobile"].includes(value) ? value as Exclude<BlockVisibility, "all"> : "all";
+}
+
 function titleTag(value: string): "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "div" | "span" | "p" {
   return ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].includes(value) ? value as ReturnType<typeof titleTag> : "h3";
 }
@@ -33,9 +60,24 @@ function DynamicTitle({ tag, children }: { tag: ReturnType<typeof titleTag>; chi
   return createElement(tag, null, children);
 }
 
-function styledProps(block: PageBlock, extra: CSSProperties = {}): { style: CSSProperties; "data-block-style"?: "true" } {
+function styledProps(block: PageBlock, extra: CSSProperties = {}): { style: CSSProperties; "data-block-style"?: "true"; id?: string; role?: string; title?: string; "aria-label"?: string; "data-block-visibility"?: Exclude<BlockVisibility, "all">; "data-page-block-scope"?: string } {
   const css = { ...pageBlockStyleToCss(block.style), ...extra } as CSSProperties;
-  return Object.keys(css).length > 0 ? { style: css, "data-block-style": "true" } : { style: css };
+  const id = safeBlockId(text(block.data.cssId));
+  const visibility = blockVisibility(text(block.data.visibility));
+  const role = new Set(["article", "complementary", "main", "navigation", "region", "section"]).has(text(block.data.role)) ? text(block.data.role) : undefined;
+  const ariaLabel = text(block.data.ariaLabel).trim().slice(0, 160) || undefined;
+  const title = text(block.data.titleAttribute).trim().slice(0, 160) || undefined;
+  const hasCustomCss = Boolean(safeCustomCss(text(block.data.customCss)));
+  return {
+    style: css,
+    ...(Object.keys(css).length > 0 ? { "data-block-style": "true" as const } : {}),
+    ...(id ? { id } : {}),
+    ...(role ? { role } : {}),
+    ...(title ? { title } : {}),
+    ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
+    ...(visibility !== "all" ? { "data-block-visibility": visibility } : {}),
+    ...(hasCustomCss ? { "data-page-block-scope": block.id } : {}),
+  };
 }
 
 function ActionLink({ href, label, className = "", id, children }: { href: string; label: string; className?: string; id?: string; children?: ReactNode }) {
@@ -44,13 +86,42 @@ function ActionLink({ href, label, className = "", id, children }: { href: strin
   return target.startsWith("/") ? <Link className={`button ${className}`.trim()} href={target} id={id}>{content}</Link> : <a className={`button ${className}`.trim()} href={target} id={id} rel="noreferrer">{content}</a>;
 }
 
-function CatalogBlock({ block, products }: { block: PageBlock; products: ProductListItem[] }) {
+function CatalogBlock({ block, products, filterCategory, productPage }: { block: PageBlock; products: ProductListItem[]; filterCategory: string; productPage: number }) {
   const data = block.data;
   const heading = text(data.heading) || (block.type === "product_category" ? text(data.category) || "Shop the collection" : "Featured products");
   const category = text(data.category);
-  const maxItems = Math.min(12, Math.max(1, Number(data.maxItems) || 6));
-  const visible = products.filter((product) => (block.type === "sale_grid" ? product.salePriceCents !== null : true) && (!category || product.category.toLowerCase() === category.toLowerCase())).slice(0, maxItems);
-  return <section className="content-block content-block-products" {...styledProps(block)}><div className="content-block-section-heading"><div><span className="eyebrow">Physical goods</span><h2>{heading}</h2></div>{category ? <Link className="panel-link" href={`/products?category=${encodeURIComponent(category)}`}>View collection</Link> : null}</div>{visible.length > 0 ? <div className="product-grid">{visible.map((product) => <article className="product-card" key={product.id}><div className="product-art" aria-hidden="true"><span>{product.category}</span></div><div className="product-card-copy"><span className="eyebrow">{product.sku}</span><h3>{product.name}</h3><p>{product.description}</p><div className="product-card-footer"><strong>{formatMoney(product.priceCents)}</strong><Link href={`/products/${product.slug}`} className="button button-small">View product</Link></div></div></article>)}</div> : <p className="muted">No products are available in this collection yet.</p>}</section>;
+  const columns = Math.min(6, Math.max(1, Number(data.columns) || 3));
+  const itemsPerPage = Math.min(48, Math.max(1, Number(data.itemsPerPage ?? data.maxItems) || 6));
+  const pagination = text(data.pagination) === "none" ? "none" : "numbers";
+  const sort = text(data.sort) || "name-asc";
+  const cardOptions: ProductCardOptions = {
+    showImage: text(data.showImage) !== "no",
+    showSku: text(data.showSku) !== "no",
+    showDescription: text(data.showDescription) !== "no",
+    showPrice: text(data.showPrice) !== "no",
+    showInventory: text(data.showInventory) !== "no",
+    showButton: text(data.showButton) !== "no",
+    buttonLabel: text(data.buttonLabel) || "View product",
+    cardStyle: text(data.cardStyle) === "minimal" ? "minimal" : "card",
+  };
+  const filtered = products.filter((product) => (block.type === "sale_grid" ? product.salePriceCents !== null : true) && (!category || product.category.toLowerCase() === category.toLowerCase()));
+  const sorted = [...filtered].sort((left, right) => {
+    if (sort === "price-asc") return left.priceCents - right.priceCents || left.name.localeCompare(right.name);
+    if (sort === "price-desc") return right.priceCents - left.priceCents || left.name.localeCompare(right.name);
+    if (sort === "name-desc") return right.name.localeCompare(left.name);
+    return left.name.localeCompare(right.name);
+  });
+  const totalPages = pagination === "none" ? 1 : Math.max(1, Math.ceil(sorted.length / itemsPerPage));
+  const currentPage = Math.min(totalPages, Math.max(1, productPage));
+  const visible = pagination === "none" ? sorted.slice(0, itemsPerPage) : sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (page > 1) params.set("product_page", String(page));
+    const query = params.toString();
+    return `/products${query ? `?${query}` : ""}`;
+  };
+  return <section className="content-block content-block-products" {...styledProps(block)}><div className="content-block-section-heading"><div><span className="eyebrow">Physical goods</span><h2>{heading}</h2></div>{category ? <Link className="panel-link" href={`/products?category=${encodeURIComponent(category)}`}>View collection</Link> : filterCategory ? <div className="catalog-toolbar"><span className="category-chip active">Category: {filterCategory}</span><Link className="panel-link" href="/products">Clear category</Link></div> : null}</div>{visible.length > 0 ? <div className="product-grid" data-card-style={cardOptions.cardStyle} style={{ "--product-columns": columns } as React.CSSProperties}>{visible.map((product) => <ProductCard key={product.id} product={product} options={cardOptions} />)}</div> : <p className="muted">No products are available in this collection yet.</p>}{pagination !== "none" && totalPages > 1 ? <nav className="product-pagination" aria-label={`${heading} pages`}><Link className={currentPage === 1 ? "is-disabled" : ""} aria-disabled={currentPage === 1} href={currentPage === 1 ? pageHref(1) : pageHref(currentPage - 1)}>Previous</Link><span>Page {currentPage} of {totalPages}</span><Link className={currentPage === totalPages ? "is-disabled" : ""} aria-disabled={currentPage === totalPages} href={currentPage === totalPages ? pageHref(totalPages) : pageHref(currentPage + 1)}>Next</Link></nav> : null}</section>;
 }
 
 function GalleryBlock({ block }: { block: PageBlock }) {
@@ -78,6 +149,57 @@ function RichTextBlock({ block }: { block: PageBlock }) {
   return <section className="content-block content-block-rich-text" {...styledProps(block, inlineStyle)}>{text(block.data.heading) ? <h2>{text(block.data.heading)}</h2> : null}{hasMarkup ? <div className="rich-text-body" dangerouslySetInnerHTML={{ __html: safeBody }} /> : paragraphs(body)}</section>;
 }
 
+function HeadingBlock({ block }: { block: PageBlock }) {
+  const data = block.data;
+  const tag = titleTag(text(data.tag) || "h2");
+  const alignment = new Set(["left", "center", "right", "justify"]).has(text(data.alignment)) ? text(data.alignment) as CSSProperties["textAlign"] : undefined;
+  const heading = <DynamicTitle tag={tag}>{text(data.text) || "Add a heading"}</DynamicTitle>;
+  const href = text(data.link);
+  const linkProps = text(data.linkTarget) === "new" ? { target: "_blank", rel: text(data.linkNofollow) === "yes" ? "noreferrer nofollow" : "noreferrer" } : { rel: text(data.linkNofollow) === "yes" ? "nofollow" : undefined };
+  const linked = href ? (safeHref(href).startsWith("/") ? <Link href={safeHref(href)} {...linkProps}>{heading}</Link> : <a href={safeHref(href)} {...linkProps}>{heading}</a>) : heading;
+  return <section className="content-block content-block-heading" {...styledProps(block, { textAlign: alignment })}>{linked}</section>;
+}
+
+function videoEmbedUrl(source: string, value: string, start: number, end: number, privacy: boolean): string {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const query = new URLSearchParams();
+    if (start > 0) query.set("start", String(Math.round(start)));
+    if (end > start) query.set("end", String(Math.round(end)));
+    if (source === "youtube" && (host === "youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com")) {
+      const id = host === "youtu.be" ? url.pathname.slice(1) : url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop() || "";
+      if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return "";
+      query.set("rel", "0");
+      return `https://${privacy ? "www.youtube-nocookie.com" : "www.youtube.com"}/embed/${id}?${query.toString()}`;
+    }
+    if (source === "vimeo" && (host === "vimeo.com" || host === "player.vimeo.com")) {
+      const id = url.pathname.split("/").filter(Boolean).pop() || "";
+      if (!/^\d{4,}$/.test(id)) return "";
+      return `https://player.vimeo.com/video/${id}${query.toString() ? `?${query.toString()}` : ""}`;
+    }
+  } catch { return ""; }
+  return "";
+}
+
+function VideoBlock({ block }: { block: PageBlock }) {
+  const data = block.data;
+  const source = new Set(["youtube", "vimeo", "file"]).has(text(data.source)) ? text(data.source) : "youtube";
+  const url = text(data.url);
+  const start = Math.max(0, Number(data.start) || 0);
+  const end = Math.max(0, Number(data.end) || 0);
+  const embed = source === "file" ? "" : videoEmbedUrl(source, url, start, end, text(data.privacy) !== "no");
+  const file = source === "file" && safeImageSrc(url) ? url : "";
+  const poster = safeImageSrc(text(data.overlayImage));
+  const params = new URLSearchParams();
+  if (text(data.autoplay) === "yes") params.set("autoplay", "1");
+  if (text(data.mute) === "yes") params.set("mute", "1");
+  if (text(data.loop) === "yes") params.set("loop", "1");
+  if (text(data.controls) === "no") params.set("controls", "0");
+  const src = embed ? `${embed}${embed.includes("?") ? "&" : "?"}${params.toString()}` : "";
+  return <section className="content-block content-block-video" {...styledProps(block)}>{src ? <iframe title={text(data.overlayAlt) || "Video"} src={src} loading={text(data.lazy) === "no" ? undefined : "lazy"} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /> : file ? <video controls={text(data.controls) !== "no"} autoPlay={text(data.autoplay) === "yes"} muted={text(data.mute) === "yes"} loop={text(data.loop) === "yes"} poster={poster || undefined} preload={text(data.lazy) === "no" ? "metadata" : "none"}><source src={file} type="video/mp4" /></video> : poster ? <img src={poster} alt={text(data.overlayAlt) || "Video preview"} /> : <div className="content-video-placeholder"><Video size={26} /><span>Add a YouTube, Vimeo, or hosted video URL in the editor.</span></div>}</section>;
+}
+
 function NavigationBlock({ block, navigationMenus }: { block: PageBlock; navigationMenus: NavigationMenuView[] }) {
   const menu = navigationMenus.find((candidate) => candidate.id === text(block.data.menuId));
   const items = menu?.items.filter((item) => item.isVisible) ?? [];
@@ -88,6 +210,12 @@ function NavigationBlock({ block, navigationMenus }: { block: PageBlock; navigat
 function HtmlBlock({ block }: { block: PageBlock }) {
   const html = sanitizeHtml(text(block.data.html));
   return <section className="content-block content-block-html" {...styledProps(block)}>{html ? <div dangerouslySetInnerHTML={{ __html: html }} /> : <p className="muted">Add HTML markup in the editor.</p>}</section>;
+}
+
+function FormBlock({ block, forms }: { block: PageBlock; forms: FormDefinition[] }) {
+  const key = text(block.data.formSlug) || text(block.data.formId);
+  const form = forms.find((candidate) => candidate.slug === key || candidate.id === key);
+  return form ? <section className="content-block content-block-form" {...styledProps(block)}><FormRenderer form={form} /></section> : <section className="content-block content-block-form" {...styledProps(block)}><div className="content-form-placeholder"><span className="eyebrow">Reusable form</span><h2>{text(block.data.heading) || "Choose a form"}</h2><p className="muted">Select a published form in the page editor to render it here.</p></div></section>;
 }
 
 function ButtonBlock({ block }: { block: PageBlock }) {
@@ -142,29 +270,60 @@ function MapBlock({ block }: { block: PageBlock }) {
   return <section className="content-block content-block-map" {...styledProps(block, { height: `${height}px`, minHeight: `${height}px` })}>{embedUrl ? <iframe title={`Map of ${location}`} src={embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /> : <div className="content-map-placeholder">Add an address or valid coordinates in the editor to show a map.</div>}{mapLink ? <a className="content-map-link" href={mapLink} target="_blank" rel="noreferrer">Open in Google Maps</a> : null}</section>;
 }
 
-function ContainerBlock({ block, products, testimonials, navigationMenus }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[] }) {
-  const css = { ...pageBlockStyleToCss(block.style), ...pageBlockLayoutToCss(block.layout) };
-  const props = styledProps(block, css as CSSProperties);
-  return <section className="content-block content-block-container" {...props}><div className="content-block-container-inner"><PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} className="content-page-renderer-nested" /></div></section>;
+function LocationIndexBlock({ block, locations }: { block: PageBlock; locations: ServiceLocation[] }) {
+  return <section className="content-block content-block-location-index" {...styledProps(block)}>
+    <div className="notice-banner location-note"><MapPin size={17} /><span><strong>Sample service coverage.</strong> These pages describe virtual-first delivery examples. They do not claim a physical office, local address, review history, or imported customer relationship.</span></div>
+    <div className="content-block-section-heading"><div><span className="eyebrow">Coverage directory</span><h2>{text(block.data.heading) || "Sample service locations"}</h2></div><span className="row-meta">{locations.length} sample areas</span></div>
+    <div className="location-index-grid" aria-label="Sample service locations">
+      {locations.map((location) => <article className={`location-index-card ${location.accent}`} key={location.slug}>
+        <div className="location-card-topline"><span className="location-icon"><MapPin size={16} /></span><span className="eyebrow">{location.timezone}</span></div>
+        <h3>{location.title}</h3>
+        <p>{location.summary}</p>
+        <div className="location-card-meta"><span><Video size={13} /> {location.deliveryModes[0]}</span><span><CalendarDays size={13} /> {location.bestFor.length} use cases</span></div>
+        <Link className="button button-small" href={`/locations/${location.slug}`}>Explore coverage <ArrowUpRight size={14} /></Link>
+      </article>)}
+    </div>
+  </section>;
 }
 
-export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], className = "" }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; className?: string }) {
-  return <div className={`content-page-renderer ${className}`.trim()}>{blocks.map((block) => {
+function LocationDetailBlock({ block, locations }: { block: PageBlock; locations: ServiceLocation[] }) {
+  const location = locations.find((candidate) => candidate.slug === text(block.data.locationSlug));
+  if (!location) return <section className="content-block content-block-location-detail" {...styledProps(block)}><div className="content-form-placeholder"><span className="eyebrow">Service location template</span><h2>Choose a managed service location</h2><p className="muted">Select a location in the page editor to render its reusable detail template.</p></div></section>;
+  return <section className="content-block content-block-location-detail" {...styledProps(block)}><LocationDetailTemplate location={location} otherLocations={locations.filter((candidate) => candidate.slug !== location.slug)} /></section>;
+}
+
+function ContainerBlock({ block, products, testimonials, navigationMenus, forms, filterCategory, locations, editorMode }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; filterCategory: string; locations: ServiceLocation[]; editorMode: boolean }) {
+  const css = { ...pageBlockStyleToCss(block.style), ...pageBlockLayoutToCss(block.layout) };
+  const props = styledProps(block, css as CSSProperties);
+  return <section className="content-block content-block-container" {...props}><div className="content-block-container-inner"><PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} locations={locations} className="content-page-renderer-nested" editorMode={editorMode} /></div></section>;
+}
+
+export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], forms = [], filterCategory = "", productPage = 1, locations = serviceLocations, className = "", editorMode = false }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; filterCategory?: string; productPage?: number; locations?: ServiceLocation[]; className?: string; editorMode?: boolean }) {
+  return <div className={`content-page-renderer ${className}`.trim()}>{Children.toArray(blocks.map((block) => {
     const data = block.data;
-    if (block.type === "container") return <ContainerBlock key={block.id} block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} />;
-    if (block.type === "hero") return <section className="content-block content-block-hero" {...styledProps(block)} key={block.id}><span className="eyebrow">{text(data.eyebrow) || "Featured content"}</span><h1>{text(data.heading) || "A page built for your audience."}</h1>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}{text(data.ctaLabel) ? <ActionLink href={text(data.ctaHref)} label={text(data.ctaLabel)} /> : null}</section>;
-    if (block.type === "rich_text") return <RichTextBlock key={block.id} block={block} />;
-    if (block.type === "image") return <figure className="content-block content-block-image" {...styledProps(block)} key={block.id}>{safeImageSrc(text(data.src)) ? <img src={safeImageSrc(text(data.src))} alt={text(data.alt)} loading="lazy" /> : <div className="content-image-placeholder">Add an image URL in the editor.</div>}{text(data.caption) ? <figcaption>{text(data.caption)}</figcaption> : null}</figure>;
-    if (block.type === "image_box") return <ImageBoxBlock key={block.id} block={block} />;
-    if (block.type === "icon_box") return <IconBoxBlock key={block.id} block={block} />;
-    if (block.type === "button") return <ButtonBlock key={block.id} block={block} />;
-    if (block.type === "cta") return <section className="content-block content-block-cta" {...styledProps(block)} key={block.id}><div><span className="eyebrow">Next step</span><h2>{text(data.heading) || "Keep the conversation moving."}</h2>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}</div>{text(data.buttonLabel) ? <ActionLink href={text(data.buttonHref)} label={text(data.buttonLabel)} /> : null}</section>;
-    if (block.type === "product_grid" || block.type === "product_category" || block.type === "sale_grid") return <CatalogBlock key={block.id} block={block} products={products} />;
-    if (block.type === "gallery") return <GalleryBlock key={block.id} block={block} />;
-    if (block.type === "testimonial_grid") return <TestimonialBlock key={block.id} block={block} testimonials={testimonials} />;
-    if (block.type === "navigation_menu") return <NavigationBlock key={block.id} block={block} navigationMenus={navigationMenus} />;
-    if (block.type === "html") return <HtmlBlock key={block.id} block={block} />;
-    if (block.type === "map") return <MapBlock key={block.id} block={block} />;
-    return <div className="content-block content-block-spacer" {...styledProps(block, { height: `${Math.min(240, Math.max(12, Number(data.height) || 48))}px` })} aria-hidden="true" key={block.id} />;
-  })}</div>;
+    let rendered: ReactNode;
+    if (block.type === "container") rendered = <ContainerBlock block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} locations={locations} editorMode={editorMode} />;
+    else if (block.type === "hero") rendered = <section className="content-block content-block-hero" {...styledProps(block)}><span className="eyebrow">{text(data.eyebrow) || "Featured content"}</span><h1>{text(data.heading) || "A page built for your audience."}</h1>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}{text(data.ctaLabel) ? <ActionLink href={text(data.ctaHref)} label={text(data.ctaLabel)} /> : null}</section>;
+    else if (block.type === "heading") rendered = <HeadingBlock block={block} />;
+    else if (block.type === "rich_text") rendered = <RichTextBlock block={block} />;
+    else if (block.type === "image") rendered = <figure className="content-block content-block-image" {...styledProps(block)}>{safeImageSrc(text(data.src)) ? <img src={safeImageSrc(text(data.src))} alt={text(data.alt)} loading="lazy" /> : <div className="content-image-placeholder">Add an image URL in the editor.</div>}{text(data.caption) ? <figcaption>{text(data.caption)}</figcaption> : null}</figure>;
+    else if (block.type === "image_box") rendered = <ImageBoxBlock block={block} />;
+    else if (block.type === "icon_box") rendered = <IconBoxBlock block={block} />;
+    else if (block.type === "video") rendered = <VideoBlock block={block} />;
+    else if (block.type === "button") rendered = <ButtonBlock block={block} />;
+    else if (block.type === "cta") rendered = <section className="content-block content-block-cta" {...styledProps(block)}><div><span className="eyebrow">Next step</span><h2>{text(data.heading) || "Keep the conversation moving."}</h2>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}</div>{text(data.buttonLabel) ? <ActionLink href={text(data.buttonHref)} label={text(data.buttonLabel)} /> : null}</section>;
+    else if (block.type === "product_grid" || block.type === "product_category" || block.type === "sale_grid") rendered = <CatalogBlock block={block} products={products} filterCategory={filterCategory} productPage={productPage} />;
+    else if (block.type === "gallery") rendered = <GalleryBlock block={block} />;
+    else if (block.type === "testimonial_grid") rendered = <TestimonialBlock block={block} testimonials={testimonials} />;
+    else if (block.type === "navigation_menu") rendered = <NavigationBlock block={block} navigationMenus={navigationMenus} />;
+    else if (block.type === "html") rendered = <HtmlBlock block={block} />;
+    else if (block.type === "form") rendered = <FormBlock block={block} forms={forms} />;
+    else if (block.type === "location_index") rendered = <LocationIndexBlock block={block} locations={locations} />;
+    else if (block.type === "location_detail") rendered = <LocationDetailBlock block={block} locations={locations} />;
+    else if (block.type === "map") rendered = <MapBlock block={block} />;
+    else rendered = <div className="content-block content-block-spacer" {...styledProps(block, { height: `${Math.min(240, Math.max(12, Number(data.height) || 48))}px` })} aria-hidden="true" />;
+    const customCss = scopedCustomCss(text(block.data.customCss), `[data-page-block-scope="${block.id}"]`);
+    const withCustomCss = customCss ? <>{rendered}<style>{customCss}</style></> : rendered;
+    return editorMode ? <div key={block.id} className="page-renderer-block-editor-frame" data-page-block-id={block.id} data-page-block-type={block.type}>{withCustomCss}</div> : <Fragment key={block.id}>{withCustomCss}</Fragment>;
+  }))}</div>;
 }

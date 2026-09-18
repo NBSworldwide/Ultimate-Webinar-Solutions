@@ -1,4 +1,4 @@
-import type { PageBlockLayout, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber } from "@/lib/types";
+import type { PageBlockLayout, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber } from "@/lib/types";
 
 export const PAGE_STYLE_DEVICES: Array<{ key: PageStyleDevice; label: string }> = [
   { key: "widescreen", label: "Widescreen" },
@@ -183,11 +183,24 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     if (Object.keys(result.border).length === 0) delete result.border;
   }
 
+  const mask = record(source.mask);
+  if (mask) {
+    result.mask = {};
+    if (typeof mask.enabled === "boolean") result.mask.enabled = mask.enabled;
+    const shape = enumValue(mask.shape, ["circle", "oval", "pill", "pill-vertical", "triangle", "diamond", "hexagon", "blob", "custom"] as const);
+    if (shape) result.mask.shape = shape;
+    const image = imageValue(mask.image);
+    if (image) result.mask.image = image;
+    if (Object.keys(result.mask).length === 0) delete result.mask;
+  }
+
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
 const containerModes = ["flex", "grid"] as const;
 const containerContentWidths = ["boxed", "full"] as const;
+const containerSpacing = ["global", "custom"] as const;
+const containerMeasureUnits = ["px", "%", "em", "rem", "vw", "vh"] as const;
 const containerDirections = ["row", "column", "row-reverse", "column-reverse"] as const;
 const containerJustifyValues = ["start", "center", "end", "space-between", "space-around", "space-evenly"] as const;
 const containerAlignValues = ["start", "center", "end", "stretch"] as const;
@@ -199,6 +212,9 @@ export function normalizePageBlockLayout(input: unknown): PageBlockLayout | unde
   const result: PageBlockLayout = {};
   const mode = enumValue(source.mode, containerModes);
   const contentWidth = enumValue(source.contentWidth, containerContentWidths);
+  const spacing = enumValue(source.spacing, containerSpacing);
+  const widthUnit = enumValue(source.widthUnit, containerMeasureUnits);
+  const minHeightUnit = enumValue(source.minHeightUnit, containerMeasureUnits);
   const direction = enumValue(source.direction, containerDirections);
   const justifyContent = enumValue(source.justifyContent, containerJustifyValues);
   const alignItems = enumValue(source.alignItems, containerAlignValues);
@@ -207,6 +223,9 @@ export function normalizePageBlockLayout(input: unknown): PageBlockLayout | unde
   const justifyItems = enumValue(source.justifyItems, containerAlignValues);
   if (mode) result.mode = mode;
   if (contentWidth) result.contentWidth = contentWidth;
+  if (spacing) result.spacing = spacing;
+  if (widthUnit) result.widthUnit = widthUnit;
+  if (minHeightUnit) result.minHeightUnit = minHeightUnit;
   if (direction) result.direction = direction;
   if (justifyContent) result.justifyContent = justifyContent;
   if (alignItems) result.alignItems = alignItems;
@@ -249,6 +268,17 @@ function setResponsiveEdgeVariables(target: Record<string, string>, prefix: stri
 }
 
 function cssUrl(value: string): string { return `url("${value.replace(/["\\]/g, "")}")`; }
+
+const maskClipPaths: Record<string, string> = {
+  circle: "circle(50% at 50% 50%)",
+  oval: "ellipse(50% 50% at 50% 50%)",
+  pill: "inset(0 round 999px)",
+  "pill-vertical": "inset(0 30% round 999px)",
+  triangle: "polygon(50% 0, 100% 100%, 0 100%)",
+  diamond: "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)",
+  hexagon: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)",
+  blob: "polygon(6% 20%, 25% 4%, 52% 8%, 82% 0, 98% 24%, 91% 57%, 100% 84%, 70% 96%, 43% 88%, 13% 100%, 0 69%)",
+};
 
 export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<string, string> {
   const style = normalizePageBlockStyle(input);
@@ -329,6 +359,11 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
       css["--block-box-shadow"] = `${border.shadow.position === "inset" ? "inset " : ""}${horizontal}px ${vertical}px ${blur}px ${spread}px ${color}`;
     }
   }
+  if (style.mask?.enabled) {
+    const shape = style.mask.shape ?? "circle";
+    if (shape === "custom" && style.mask.image) css["--block-mask-image"] = cssUrl(style.mask.image);
+    else if (maskClipPaths[shape]) css["--block-clip-path"] = maskClipPaths[shape];
+  }
   return css;
 }
 
@@ -349,6 +384,7 @@ export function pageBlockLayoutToCss(input: PageBlockLayout | undefined): Record
   const css: Record<string, string> = {};
   const mode: PageContainerMode = layout.mode ?? "flex";
   const contentWidth: PageContainerContentWidth = layout.contentWidth ?? "boxed";
+  const spacing: PageContainerSpacing = layout.spacing ?? (layout.columnGap === undefined && layout.rowGap === undefined ? "global" : "custom");
   const direction: PageContainerDirection = layout.direction ?? "column";
   const wrap: PageContainerWrap = layout.wrap ?? "nowrap";
   css["--container-display"] = mode === "grid" ? "grid" : "flex";
@@ -361,10 +397,18 @@ export function pageBlockLayoutToCss(input: PageBlockLayout | undefined): Record
   css["--container-auto-flow"] = layout.autoFlow ?? "row";
   css["--container-columns"] = String(Math.round(layout.columns ?? 2));
   css["--container-rows"] = String(Math.round(layout.rows ?? 1));
-  css["--container-column-gap"] = `${Math.round(layout.columnGap ?? 24)}px`;
-  css["--container-row-gap"] = `${Math.round(layout.rowGap ?? 24)}px`;
-  if (layout.width !== undefined) css["--container-width"] = `${layout.width}px`;
-  if (layout.minHeight !== undefined) css["--container-min-height"] = `${layout.minHeight}px`;
+  css["--container-column-gap"] = layout.columnGap === undefined ? "var(--global-column-gap, 24px)" : `${Math.round(layout.columnGap)}px`;
+  css["--container-row-gap"] = layout.rowGap === undefined ? "var(--global-row-gap, 24px)" : `${Math.round(layout.rowGap)}px`;
+  css["--container-margin-top"] = spacing === "global" ? "0px" : "0px";
+  css["--container-margin-right"] = spacing === "global" ? "0px" : "0px";
+  css["--container-margin-bottom"] = spacing === "global" ? "0px" : "0px";
+  css["--container-margin-left"] = spacing === "global" ? "0px" : "0px";
+  css["--container-padding-top"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
+  css["--container-padding-right"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
+  css["--container-padding-bottom"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
+  css["--container-padding-left"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
+  if (layout.width !== undefined) css["--container-width"] = `${layout.width}${layout.widthUnit ?? "px"}`;
+  if (layout.minHeight !== undefined) css["--container-min-height"] = `${layout.minHeight}${layout.minHeightUnit ?? "px"}`;
   if (layout.gridOutline) css["--container-grid-outline"] = "1px dashed rgba(24, 59, 54, .28)";
   return css;
 }
