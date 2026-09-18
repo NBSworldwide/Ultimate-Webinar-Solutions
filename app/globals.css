@@ -60,7 +60,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .app-frame { display: flex; min-height: 100vh; }
-.sidebar { width: 250px; background: #eaf0eb; border-right: 1px solid #d8e2dc; padding: 25px 15px 17px; display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar { position: sticky; top: 0; width: 250px; height: 100vh; max-height: 100vh; overflow-y: auto; background: #eaf0eb; border-right: 1px solid #d8e2dc; padding: 25px 15px 17px; display: flex; flex-direction: column; flex-shrink: 0; }
 .brand-lockup, .public-brand { display: flex; align-items: center; gap: 10px; font-family: Manrope, sans-serif; font-weight: 800; letter-spacing: -0.04em; }
 .brand-lockup { padding: 0 12px; }
 .brand-mark { width: 31px; height: 31px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: var(--teal); box-shadow: 0 4px 12px rgba(15,119,110,.2); }
@@ -1257,7 +1257,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-
 }
 @media (max-width: 760px) {
   .app-frame { display: block; }
-  .sidebar { width: 100%; padding: 16px 16px 12px; }
+  .sidebar { position: static; width: 100%; height: auto; max-height: none; overflow: visible; padding: 16px 16px 12px; }
   .workspace-switcher, .sidebar-footer { display: none; }
   .primary-nav { display: flex; gap: 5px; overflow-x: auto; margin-top: 17px; }
   .nav-label, .nav-label-spaced { display: none; }
