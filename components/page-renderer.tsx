@@ -1,22 +1,31 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, CheckCircle2, Gift, Globe2, Heart, MapPin, ShieldCheck, Sparkles, Star, Trophy, Users, Video } from "lucide-react";
-import { Children, createElement, Fragment, type CSSProperties, type ComponentType, type ReactNode } from "react";
+import { ArrowUpRight, CalendarDays, CheckCircle2, Gift, Globe2, Heart, MapPin, Plus, ShieldCheck, Sparkles, Star, Trophy, Users, Video } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
+import { faCalendar as faCalendarRegular, faCircleCheck as faCircleCheckRegular, faHeart as faHeartRegular, faStar as faStarRegular } from "@fortawesome/free-regular-svg-icons";
+import { faFacebook, faInstagram, faLinkedin, faYoutube } from "@fortawesome/free-brands-svg-icons";
+import { faCalendar as faCalendarSolid, faCircleCheck, faGift as faGiftSolid, faHeart as faHeartSolid, faShieldHalved, faStar as faStarSolid, faTrophy as faTrophySolid, faUsers as faUsersSolid, faVideo as faVideoSolid, faWandMagicSparkles } from "@fortawesome/free-solid-svg-icons";
+import { Children, cloneElement, createElement, Fragment, isValidElement, type CSSProperties, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { PublicNavigation } from "@/components/public-navigation";
 import { FormRenderer } from "@/components/form-renderer";
 import { LocationDetailTemplate } from "@/components/location-detail-template";
 import { ProductCard, type ProductCardOptions } from "@/components/product-card";
+import { VideoBlockClient } from "@/components/video-block";
+import { BackgroundLayer } from "@/components/background-layer";
+import { MapPlaceCard } from "@/components/map-place-card";
 import type { NavigationMenuView } from "@/lib/navigation";
 import { pageBlockLayoutToCss, pageBlockStyleToCss } from "@/lib/page-styles";
 import { normalizeMapLocation } from "@/lib/map-location";
 import { formatMoney } from "@/lib/format";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { safeLinkAttributes } from "@/lib/link-attributes";
 import { serviceLocations, type ServiceLocation } from "@/content/locations";
 import type { FormDefinition, PageBlock, ProductListItem, TestimonialView } from "@/lib/types";
 
 function text(value: string | number | undefined): string { return typeof value === "string" ? value : ""; }
 
-function paragraphs(value: string): ReactNode {
-  return value.split(/\r?\n\s*\r?\n/).filter(Boolean).map((paragraph, index) => <p key={`${paragraph}-${index}`}>{paragraph}</p>);
+function paragraphs(value: string, className?: string): ReactNode {
+  return value.split(/\r?\n\s*\r?\n/).filter(Boolean).map((paragraph, index) => <p className={className} key={`${paragraph}-${index}`}>{paragraph}</p>);
 }
 
 function safeHref(value: string): string {
@@ -60,13 +69,14 @@ function DynamicTitle({ tag, children }: { tag: ReturnType<typeof titleTag>; chi
   return createElement(tag, null, children);
 }
 
-function styledProps(block: PageBlock, extra: CSSProperties = {}): { style: CSSProperties; "data-block-style"?: "true"; id?: string; role?: string; title?: string; "aria-label"?: string; "data-block-visibility"?: Exclude<BlockVisibility, "all">; "data-page-block-scope"?: string } {
+function styledProps(block: PageBlock, extra: CSSProperties = {}): { style: CSSProperties; "data-block-style"?: "true"; id?: string; role?: string; title?: string; "aria-label"?: string; "data-block-visibility"?: Exclude<BlockVisibility, "all">; "data-block-hidden-devices"?: string; "data-page-block-scope"?: string } {
   const css = { ...pageBlockStyleToCss(block.style), ...extra } as CSSProperties;
   const id = safeBlockId(text(block.data.cssId));
   const visibility = blockVisibility(text(block.data.visibility));
   const role = new Set(["article", "complementary", "main", "navigation", "region", "section"]).has(text(block.data.role)) ? text(block.data.role) : undefined;
   const ariaLabel = text(block.data.ariaLabel).trim().slice(0, 160) || undefined;
   const title = text(block.data.titleAttribute).trim().slice(0, 160) || undefined;
+  const hiddenDevices = text(block.data.hiddenDevices).split(",").map((value) => value.trim()).filter((value) => /^[a-z]+(?:[A-Z][a-z]+)*$/.test(value)).join(" ");
   const hasCustomCss = Boolean(safeCustomCss(text(block.data.customCss)));
   return {
     style: css,
@@ -76,6 +86,7 @@ function styledProps(block: PageBlock, extra: CSSProperties = {}): { style: CSSP
     ...(title ? { title } : {}),
     ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
     ...(visibility !== "all" ? { "data-block-visibility": visibility } : {}),
+    ...(hiddenDevices ? { "data-block-hidden-devices": hiddenDevices } : {}),
     ...(hasCustomCss ? { "data-page-block-scope": block.id } : {}),
   };
 }
@@ -155,12 +166,13 @@ function HeadingBlock({ block }: { block: PageBlock }) {
   const alignment = new Set(["left", "center", "right", "justify"]).has(text(data.alignment)) ? text(data.alignment) as CSSProperties["textAlign"] : undefined;
   const heading = <DynamicTitle tag={tag}>{text(data.text) || "Add a heading"}</DynamicTitle>;
   const href = text(data.link);
-  const linkProps = text(data.linkTarget) === "new" ? { target: "_blank", rel: text(data.linkNofollow) === "yes" ? "noreferrer nofollow" : "noreferrer" } : { rel: text(data.linkNofollow) === "yes" ? "nofollow" : undefined };
+  const customAttributes = safeLinkAttributes(data.linkAttributes);
+  const linkProps = text(data.linkTarget) === "new" ? { target: "_blank", rel: text(data.linkNofollow) === "yes" ? "noreferrer nofollow" : "noreferrer", ...customAttributes } : { rel: text(data.linkNofollow) === "yes" ? "nofollow" : undefined, ...customAttributes };
   const linked = href ? (safeHref(href).startsWith("/") ? <Link href={safeHref(href)} {...linkProps}>{heading}</Link> : <a href={safeHref(href)} {...linkProps}>{heading}</a>) : heading;
   return <section className="content-block content-block-heading" {...styledProps(block, { textAlign: alignment })}>{linked}</section>;
 }
 
-function videoEmbedUrl(source: string, value: string, start: number, end: number, privacy: boolean): string {
+function videoEmbedUrl(source: string, value: string, start: number, end: number, privacy: boolean, suggestedVideos = false, captions = false): string {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
@@ -170,7 +182,8 @@ function videoEmbedUrl(source: string, value: string, start: number, end: number
     if (source === "youtube" && (host === "youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com")) {
       const id = host === "youtu.be" ? url.pathname.slice(1) : url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop() || "";
       if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return "";
-      query.set("rel", "0");
+      query.set("rel", suggestedVideos ? "1" : "0");
+      if (captions) query.set("cc_load_policy", "1");
       return `https://${privacy ? "www.youtube-nocookie.com" : "www.youtube.com"}/embed/${id}?${query.toString()}`;
     }
     if (source === "vimeo" && (host === "vimeo.com" || host === "player.vimeo.com")) {
@@ -188,23 +201,41 @@ function VideoBlock({ block }: { block: PageBlock }) {
   const url = text(data.url);
   const start = Math.max(0, Number(data.start) || 0);
   const end = Math.max(0, Number(data.end) || 0);
-  const embed = source === "file" ? "" : videoEmbedUrl(source, url, start, end, text(data.privacy) !== "no");
+  const captions = text(data.captions) === "yes";
+  const suggestedVideos = text(data.suggestedVideos) === "yes";
+  const embed = source === "file" ? "" : videoEmbedUrl(source, url, start, end, text(data.privacy) !== "no", suggestedVideos, captions);
   const file = source === "file" && safeImageSrc(url) ? url : "";
   const poster = safeImageSrc(text(data.overlayImage));
+  const captionsUrl = safeImageSrc(text(data.captionsUrl));
   const params = new URLSearchParams();
-  if (text(data.autoplay) === "yes") params.set("autoplay", "1");
   if (text(data.mute) === "yes") params.set("mute", "1");
   if (text(data.loop) === "yes") params.set("loop", "1");
   if (text(data.controls) === "no") params.set("controls", "0");
-  const src = embed ? `${embed}${embed.includes("?") ? "&" : "?"}${params.toString()}` : "";
-  return <section className="content-block content-block-video" {...styledProps(block)}>{src ? <iframe title={text(data.overlayAlt) || "Video"} src={src} loading={text(data.lazy) === "no" ? undefined : "lazy"} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /> : file ? <video controls={text(data.controls) !== "no"} autoPlay={text(data.autoplay) === "yes"} muted={text(data.mute) === "yes"} loop={text(data.loop) === "yes"} poster={poster || undefined} preload={text(data.lazy) === "no" ? "metadata" : "none"}><source src={file} type="video/mp4" /></video> : poster ? <img src={poster} alt={text(data.overlayAlt) || "Video preview"} /> : <div className="content-video-placeholder"><Video size={26} /><span>Add a YouTube, Vimeo, or hosted video URL in the editor.</span></div>}</section>;
+  const passiveSrc = embed ? `${embed}${embed.includes("?") ? "&" : "?"}${params.toString()}` : "";
+  const playParams = new URLSearchParams(params);
+  playParams.set("autoplay", "1");
+  const playingSrc = embed ? `${embed}${embed.includes("?") ? "&" : "?"}${playParams.toString()}` : "";
+  return <section className="content-block content-block-video" {...styledProps(block)}><VideoBlockClient embedSrc={passiveSrc} embedPlaySrc={playingSrc} file={file} poster={poster} alt={text(data.overlayAlt) || "Video preview"} showOverlay={text(data.overlay) === "show"} showPlayIcon={text(data.overlayPlayIcon) !== "no"} lightbox={text(data.overlayLightbox) === "yes"} autoplay={text(data.autoplay) === "yes"} mute={text(data.mute) === "yes"} loop={text(data.loop) === "yes"} controls={text(data.controls) !== "no"} lazy={text(data.lazy) !== "no"} captions={captions} captionsUrl={captionsUrl} /></section>;
 }
 
-function NavigationBlock({ block, navigationMenus }: { block: PageBlock; navigationMenus: NavigationMenuView[] }) {
+function backgroundLayerForBlock(block: PageBlock): ReactNode | null {
+  const background = block.style?.background;
+  if (!background || background.mode === "none") return null;
+  if (background.mode === "video") {
+    const source = background.videoSource ?? "file";
+    const url = safeImageSrc(background.videoUrl ?? "");
+    const embed = source === "file" ? "" : videoEmbedUrl(source, url, background.videoStart ?? 0, background.videoEnd ?? 0, true);
+    return <BackgroundLayer mode="video" videoUrl={source === "file" ? url : ""} videoEmbed={embed} fallbackImage={safeImageSrc(background.videoFallbackImage ?? "")} />;
+  }
+  if (background.mode === "slideshow") return <BackgroundLayer mode="slideshow" images={(background.slideshowImages ?? []).map((image) => safeImageSrc(image)).filter(Boolean)} infinite={background.slideshowInfinite ?? true} duration={background.slideshowDuration} transition={background.slideshowTransition} transitionDuration={background.slideshowTransitionDuration} lazyLoad={background.slideshowLazyLoad} kenBurns={background.slideshowKenBurns} />;
+  return null;
+}
+
+function NavigationBlock({ block, navigationMenus, isAuthenticated }: { block: PageBlock; navigationMenus: NavigationMenuView[]; isAuthenticated: boolean }) {
   const menu = navigationMenus.find((candidate) => candidate.id === text(block.data.menuId));
   const items = menu?.items.filter((item) => item.isVisible) ?? [];
   const layout = text(block.data.layout) === "stacked" ? "content-block-menu-stacked" : "content-block-menu-horizontal";
-  return <section className="content-block content-block-navigation" {...styledProps(block)}><div className="content-block-section-heading"><div><span className="eyebrow">Navigation</span><h2>{text(block.data.heading) || menu?.name || "Explore more"}</h2></div>{menu ? <span className="row-meta">{menu.name}</span> : null}</div>{menu && items.length > 0 ? <PublicNavigation items={items} ariaLabel={menu.name} className={layout} /> : <p className="muted">Choose a saved menu in the block settings.</p>}</section>;
+  return <section className="content-block content-block-navigation" {...styledProps(block)}><div className="content-block-section-heading"><div><span className="eyebrow">Navigation</span><h2>{text(block.data.heading) || menu?.name || "Explore more"}</h2></div>{menu ? <span className="row-meta">{menu.name}</span> : null}</div>{menu && items.length > 0 ? <PublicNavigation items={items} ariaLabel={menu.name} className={layout} isAuthenticated={isAuthenticated} /> : <p className="muted">Choose a saved menu in the block settings.</p>}</section>;
 }
 
 function HtmlBlock({ block }: { block: PageBlock }) {
@@ -243,9 +274,17 @@ function ImageBoxBlock({ block }: { block: PageBlock }) {
 type IconComponent = ComponentType<{ size?: number; strokeWidth?: number; "aria-hidden"?: boolean }>;
 const iconComponents: Record<string, IconComponent> = { star: Star, heart: Heart, shield: ShieldCheck, check: CheckCircle2, sparkles: Sparkles, calendar: CalendarDays, video: Video, gift: Gift, users: Users, trophy: Trophy, facebook: Globe2, instagram: Globe2, youtube: Globe2, linkedin: Globe2 };
 
-function IconGlyph({ name, url }: { name: string; url: string }) {
+const fontAwesomeIconSets: Record<string, Record<string, IconDefinition>> = {
+  "fontawesome-regular": { star: faStarRegular, heart: faHeartRegular, check: faCircleCheckRegular, calendar: faCalendarRegular },
+  "fontawesome-solid": { star: faStarSolid, heart: faHeartSolid, shield: faShieldHalved, check: faCircleCheck, sparkles: faWandMagicSparkles, calendar: faCalendarSolid, video: faVideoSolid, gift: faGiftSolid, users: faUsersSolid, trophy: faTrophySolid },
+  "fontawesome-brands": { facebook: faFacebook, instagram: faInstagram, youtube: faYoutube, linkedin: faLinkedin },
+};
+
+function IconGlyph({ name, source, url }: { name: string; source: string; url: string }) {
   const src = safeImageSrc(url);
   if (src) return <img className="icon-box-custom-icon" src={src} alt="" aria-hidden="true" />;
+  const fontAwesomeIcon = fontAwesomeIconSets[source]?.[name];
+  if (fontAwesomeIcon) return <FontAwesomeIcon icon={fontAwesomeIcon} aria-hidden="true" />;
   const Icon = iconComponents[name] ?? Star;
   return <Icon size={28} strokeWidth={1.8} aria-hidden={true} />;
 }
@@ -254,9 +293,35 @@ function IconBoxBlock({ block }: { block: PageBlock }) {
   const data = block.data;
   const target = safeHref(text(data.link));
   const view = new Set(["default", "stacked", "framed"]).has(text(data.iconView)) ? text(data.iconView) : "framed";
-  const content = <><div className={`icon-box-icon icon-box-icon-${view}`}><IconGlyph name={text(data.iconName)} url={text(data.iconUrl)} /></div><div className="icon-box-copy">{text(data.title) ? <DynamicTitle tag={titleTag(text(data.titleTag))}>{text(data.title)}</DynamicTitle> : null}{text(data.description) ? <div>{paragraphs(text(data.description))}</div> : null}</div></>;
+  const content = <><div className={`icon-box-icon icon-box-icon-${view}`}><IconGlyph name={text(data.iconName)} source={text(data.iconSource) || "fontawesome-solid"} url={text(data.iconUrl)} /></div><div className="icon-box-copy">{text(data.title) ? <DynamicTitle tag={titleTag(text(data.titleTag))}>{text(data.title)}</DynamicTitle> : null}{text(data.description) ? <div>{paragraphs(text(data.description))}</div> : null}</div></>;
   const body = text(data.link) && target !== "#" ? target.startsWith("/") ? <Link href={target}>{content}</Link> : <a href={target} rel="noreferrer">{content}</a> : content;
   return <article className={`content-block content-block-icon-box icon-box-view-${view}`} {...styledProps(block)}>{body}</article>;
+}
+
+function IconBlock({ block }: { block: PageBlock }) {
+  const data = block.data;
+  const target = safeHref(text(data.link));
+  const view = new Set(["default", "stacked", "framed"]).has(text(data.iconView)) ? text(data.iconView) : "default";
+  const icon = <span className={`content-icon-glyph content-icon-glyph-${view}`}><IconGlyph name={text(data.iconName) || "sparkles"} source={text(data.iconSource) || "fontawesome-solid"} url={text(data.iconUrl)} /></span>;
+  const linkProps = text(data.linkTarget) === "new" ? { target: "_blank", rel: text(data.linkNofollow) === "yes" ? "noreferrer nofollow" : "noreferrer" } : { rel: text(data.linkNofollow) === "yes" ? "nofollow" : undefined };
+  const body = text(data.link) && target !== "#" ? target.startsWith("/") ? <Link href={target} {...linkProps}>{icon}</Link> : <a href={target} {...linkProps}>{icon}</a> : icon;
+  return <div className={`content-block content-block-icon icon-view-${view}`} {...styledProps(block)}>{body}</div>;
+}
+
+function CtaBlock({ block }: { block: PageBlock }) {
+  const data = block.data;
+  const graphicType = new Set(["none", "image", "icon"]).has(text(data.graphicType)) ? text(data.graphicType) : "none";
+  let graphic: ReactNode = null;
+  if (graphicType === "image" && safeImageSrc(text(data.graphicImage))) graphic = <img className="content-cta-graphic-image" src={safeImageSrc(text(data.graphicImage))} alt="" loading="lazy" />;
+  if (graphicType === "icon") graphic = <span className="content-cta-graphic-icon"><IconGlyph name={text(data.graphicIcon) || "sparkles"} source="fontawesome-solid" url="" /></span>;
+  const headingTag = titleTag(text(data.titleTag) || "h2");
+  const descriptionTag = new Set(["p", "div", "span"]).has(text(data.descriptionTag)) ? text(data.descriptionTag) as "p" | "div" | "span" : "p";
+  const heading = <DynamicTitle tag={headingTag}>{text(data.heading) || "Ready for the next step?"}</DynamicTitle>;
+  const body = text(data.body) ? descriptionTag === "p" ? paragraphs(text(data.body), "content-cta-description") : createElement(descriptionTag, { className: "content-cta-description" }, text(data.body)) : null;
+  const href = safeHref(text(data.buttonHref));
+  const linkProps = text(data.buttonTarget) === "new" ? { target: "_blank", rel: text(data.buttonNofollow) === "yes" ? "noreferrer nofollow" : "noreferrer" } : { rel: text(data.buttonNofollow) === "yes" ? "nofollow" : undefined };
+  const button = text(data.buttonLabel) ? href.startsWith("/") ? <Link className="button" href={href} {...linkProps}>{text(data.buttonLabel)}</Link> : <a className="button" href={href} {...linkProps}>{text(data.buttonLabel)}</a> : null;
+  return <section className="content-block content-block-cta" {...styledProps(block)}>{graphic ? <div className="content-cta-graphic">{graphic}</div> : null}<div className="content-cta-copy"><span className="eyebrow">{text(data.ribbonText) || "Next step"}</span>{heading}{body}</div>{button ? <div className="content-cta-action">{button}</div> : null}</section>;
 }
 
 function MapBlock({ block }: { block: PageBlock }) {
@@ -267,7 +332,9 @@ function MapBlock({ block }: { block: PageBlock }) {
   const query = encodeURIComponent(resolved?.query ?? "");
   const embedUrl = location ? `https://www.google.com/maps?q=${query}&z=${zoom}&output=embed` : "";
   const mapLink = location ? `https://www.google.com/maps/search/?api=1&query=${query}` : "";
-  return <section className="content-block content-block-map" {...styledProps(block, { height: `${height}px`, minHeight: `${height}px` })}>{embedUrl ? <iframe title={`Map of ${location}`} src={embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /> : <div className="content-map-placeholder">Add an address or valid coordinates in the editor to show a map.</div>}{mapLink ? <a className="content-map-link" href={mapLink} target="_blank" rel="noreferrer">Open in Google Maps</a> : null}</section>;
+  const showPlaceCard = text(block.data.showPlaceCard) === "yes";
+  const placeQuery = text(block.data.placeQuery) || location;
+  return <section className="content-block content-block-map" {...styledProps(block, { height: `${height}px`, minHeight: `${height}px` })}>{embedUrl ? <iframe title={`Map of ${location}`} src={embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /> : <div className="content-map-placeholder">Add an address or valid coordinates in the editor to show a map.</div>}{showPlaceCard && placeQuery ? <MapPlaceCard key={placeQuery} query={placeQuery} /> : null}{mapLink ? <a className="content-map-link" href={mapLink} target="_blank" rel="noreferrer">Open in Google Maps</a> : null}</section>;
 }
 
 function LocationIndexBlock({ block, locations }: { block: PageBlock; locations: ServiceLocation[] }) {
@@ -292,38 +359,46 @@ function LocationDetailBlock({ block, locations }: { block: PageBlock; locations
   return <section className="content-block content-block-location-detail" {...styledProps(block)}><LocationDetailTemplate location={location} otherLocations={locations.filter((candidate) => candidate.slug !== location.slug)} /></section>;
 }
 
-function ContainerBlock({ block, products, testimonials, navigationMenus, forms, filterCategory, locations, editorMode }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; filterCategory: string; locations: ServiceLocation[]; editorMode: boolean }) {
+function ContainerBlock({ block, products, testimonials, navigationMenus, forms, filterCategory, productPage, locations, editorMode, isAuthenticated, depth }: { block: PageBlock; products: ProductListItem[]; testimonials: TestimonialView[]; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; filterCategory: string; productPage: number; locations: ServiceLocation[]; editorMode: boolean; isAuthenticated: boolean; depth: number }) {
   const css = { ...pageBlockStyleToCss(block.style), ...pageBlockLayoutToCss(block.layout) };
   const props = styledProps(block, css as CSSProperties);
-  return <section className="content-block content-block-container" {...props}><div className="content-block-container-inner"><PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} locations={locations} className="content-page-renderer-nested" editorMode={editorMode} /></div></section>;
+  const tag = new Set(["div", "header", "footer", "main", "article", "section", "aside", "nav", "a"]).has(text(block.layout?.htmlTag)) ? text(block.layout?.htmlTag) : "section";
+  const linkProps = tag === "a" && text(block.layout?.linkUrl) ? { href: safeHref(text(block.layout?.linkUrl)), target: text(block.layout?.linkTarget) === "new" ? "_blank" : undefined, rel: text(block.layout?.linkTarget) === "new" ? "noreferrer" : undefined } : {};
+  return createElement(tag, { className: "content-block content-block-container", ...props, ...linkProps }, <div className="content-block-container-inner">{editorMode && depth > 0 ? <button type="button" className="page-preview-container-focus-button" data-page-editor-focus-container={block.id} aria-label="Add a widget to this container" title="Add widget here"><Plus size={15} /><span>Add widget</span></button> : null}<PageRenderer blocks={block.children ?? []} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} className="content-page-renderer-nested" editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth + 1} /></div>);
 }
 
-export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], forms = [], filterCategory = "", productPage = 1, locations = serviceLocations, className = "", editorMode = false }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; filterCategory?: string; productPage?: number; locations?: ServiceLocation[]; className?: string; editorMode?: boolean }) {
+export function PageRenderer({ blocks, products = [], testimonials = [], navigationMenus = [], forms = [], filterCategory = "", productPage = 1, locations = serviceLocations, className = "", editorMode = false, isAuthenticated = false, depth = 0 }: { blocks: PageBlock[]; products?: ProductListItem[]; testimonials?: TestimonialView[]; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; filterCategory?: string; productPage?: number; locations?: ServiceLocation[]; className?: string; editorMode?: boolean; isAuthenticated?: boolean; depth?: number }) {
   return <div className={`content-page-renderer ${className}`.trim()}>{Children.toArray(blocks.map((block) => {
     const data = block.data;
     let rendered: ReactNode;
-    if (block.type === "container") rendered = <ContainerBlock block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} locations={locations} editorMode={editorMode} />;
+    if (block.type === "container") rendered = <ContainerBlock block={block} products={products} testimonials={testimonials} navigationMenus={navigationMenus} forms={forms} filterCategory={filterCategory} productPage={productPage} locations={locations} editorMode={editorMode} isAuthenticated={isAuthenticated} depth={depth} />;
     else if (block.type === "hero") rendered = <section className="content-block content-block-hero" {...styledProps(block)}><span className="eyebrow">{text(data.eyebrow) || "Featured content"}</span><h1>{text(data.heading) || "A page built for your audience."}</h1>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}{text(data.ctaLabel) ? <ActionLink href={text(data.ctaHref)} label={text(data.ctaLabel)} /> : null}</section>;
     else if (block.type === "heading") rendered = <HeadingBlock block={block} />;
     else if (block.type === "rich_text") rendered = <RichTextBlock block={block} />;
     else if (block.type === "image") rendered = <figure className="content-block content-block-image" {...styledProps(block)}>{safeImageSrc(text(data.src)) ? <img src={safeImageSrc(text(data.src))} alt={text(data.alt)} loading="lazy" /> : <div className="content-image-placeholder">Add an image URL in the editor.</div>}{text(data.caption) ? <figcaption>{text(data.caption)}</figcaption> : null}</figure>;
     else if (block.type === "image_box") rendered = <ImageBoxBlock block={block} />;
+    else if (block.type === "icon") rendered = <IconBlock block={block} />;
     else if (block.type === "icon_box") rendered = <IconBoxBlock block={block} />;
     else if (block.type === "video") rendered = <VideoBlock block={block} />;
     else if (block.type === "button") rendered = <ButtonBlock block={block} />;
-    else if (block.type === "cta") rendered = <section className="content-block content-block-cta" {...styledProps(block)}><div><span className="eyebrow">Next step</span><h2>{text(data.heading) || "Keep the conversation moving."}</h2>{text(data.body) ? <div className="content-block-copy">{paragraphs(text(data.body))}</div> : null}</div>{text(data.buttonLabel) ? <ActionLink href={text(data.buttonHref)} label={text(data.buttonLabel)} /> : null}</section>;
+    else if (block.type === "cta") rendered = <CtaBlock block={block} />;
     else if (block.type === "product_grid" || block.type === "product_category" || block.type === "sale_grid") rendered = <CatalogBlock block={block} products={products} filterCategory={filterCategory} productPage={productPage} />;
     else if (block.type === "gallery") rendered = <GalleryBlock block={block} />;
     else if (block.type === "testimonial_grid") rendered = <TestimonialBlock block={block} testimonials={testimonials} />;
-    else if (block.type === "navigation_menu") rendered = <NavigationBlock block={block} navigationMenus={navigationMenus} />;
+    else if (block.type === "navigation_menu") rendered = <NavigationBlock block={block} navigationMenus={navigationMenus} isAuthenticated={isAuthenticated} />;
     else if (block.type === "html") rendered = <HtmlBlock block={block} />;
     else if (block.type === "form") rendered = <FormBlock block={block} forms={forms} />;
     else if (block.type === "location_index") rendered = <LocationIndexBlock block={block} locations={locations} />;
     else if (block.type === "location_detail") rendered = <LocationDetailBlock block={block} locations={locations} />;
     else if (block.type === "map") rendered = <MapBlock block={block} />;
     else rendered = <div className="content-block content-block-spacer" {...styledProps(block, { height: `${Math.min(240, Math.max(12, Number(data.height) || 48))}px` })} aria-hidden="true" />;
+    const backgroundLayer = backgroundLayerForBlock(block);
+    const withBackground = backgroundLayer && isValidElement(rendered) ? (() => {
+      const element = rendered as ReactElement<{ className?: string; children?: ReactNode }>;
+      return cloneElement(element, { className: `${element.props.className ?? ""} content-block-has-background-layer`.trim(), children: <>{backgroundLayer}{element.props.children}</> });
+    })() : rendered;
     const customCss = scopedCustomCss(text(block.data.customCss), `[data-page-block-scope="${block.id}"]`);
-    const withCustomCss = customCss ? <>{rendered}<style>{customCss}</style></> : rendered;
+    const withCustomCss = customCss ? <>{withBackground}<style>{customCss}</style></> : withBackground;
     return editorMode ? <div key={block.id} className="page-renderer-block-editor-frame" data-page-block-id={block.id} data-page-block-type={block.type}>{withCustomCss}</div> : <Fragment key={block.id}>{withCustomCss}</Fragment>;
   }))}</div>;
 }

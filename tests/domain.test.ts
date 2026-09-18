@@ -26,6 +26,49 @@ test("page normalization keeps every top-level widget inside a container", async
   assert.equal(blocks[1]?.children?.[0]?.id, "nested-widget");
 });
 
+test("standalone icon blocks keep safe library, link, and responsive style data", async () => {
+  const { normalizePageBlocks } = await import("@/lib/pages");
+  const blocks = normalizePageBlocks([{ id: "icon-block", type: "icon", data: { iconSource: "fontawesome-brands", iconName: "youtube", iconView: "framed", iconUrl: "https://cdn.example.test/youtube.svg", link: "/webinars", linkTarget: "new", linkNofollow: "yes" }, style: { widget: { iconAlign: "right", iconColor: "#0f776e", iconSize: { mobilePortrait: 36 }, iconRotate: { desktop: 12 } } } }]);
+  const icon = blocks[0]?.children?.[0];
+  assert.equal(icon?.type, "icon");
+  assert.equal(icon?.data.iconSource, "fontawesome-brands");
+  assert.equal(icon?.data.iconName, "youtube");
+  assert.equal(icon?.style?.widget?.iconAlign, "right");
+  assert.equal(icon?.style?.widget?.iconSize?.mobilePortrait, 36);
+  assert.equal(icon?.style?.widget?.iconRotate?.desktop, 12);
+});
+
+test("heading custom link attributes allow safe metadata and reject unsafe controls", async () => {
+  const { safeLinkAttributes } = await import("@/lib/link-attributes");
+  assert.deepEqual(safeLinkAttributes('aria-label|Read more\ndata-track="heading"\nrole|button'), {
+    "aria-label": "Read more",
+    "data-track": "heading",
+    role: "button",
+  });
+  assert.deepEqual(safeLinkAttributes('onclick|alert(1)\nstyle|color:red\nhref|https://evil.example\nrel|nofollow'), {});
+});
+
+test("container responsive layout overrides normalize and emit device CSS variables", async () => {
+  const { normalizePageBlockLayout, pageBlockLayoutToCss } = await import("@/lib/page-styles");
+  const layout = normalizePageBlockLayout({
+    mode: "flex",
+    direction: "row",
+    responsive: {
+      mobilePortrait: { direction: "column", width: 100, widthUnit: "%", columnGap: 12, minHeight: 0 },
+      desktop: { direction: "not-a-direction" },
+    },
+  });
+
+  assert.equal(layout?.responsive?.mobilePortrait?.direction, "column");
+  assert.equal(layout?.responsive?.mobilePortrait?.width, 100);
+  assert.equal(layout?.responsive?.mobilePortrait?.widthUnit, "%");
+  assert.equal(layout?.responsive?.desktop, undefined);
+  const css = pageBlockLayoutToCss(layout);
+  assert.equal(css["--container-direction-mobilePortrait"], "column");
+  assert.equal(css["--container-width-mobilePortrait"], "100%");
+  assert.equal(css["--container-column-gap-mobilePortrait"], "12px");
+});
+
 test("role capabilities keep administrator, manager, and customer boundaries distinct", () => {
   const admin = { role: "admin" as const };
   const manager = { role: "manager" as const };
@@ -199,6 +242,27 @@ test("standalone webinar domain keeps inventory, registrations, and attendee acc
       "INSERT INTO users (id, email, username, name, role, password_hash, created_at) VALUES ($1, $2, $3, $4, 'attendee', $5, NOW()::text)",
       ["user_test_attendee", "attendee@example.test", "test-attendee", "Test Attendee", "test-only-hash"],
     );
+    const { archiveSiteTemplate, createSiteTemplate, getActiveSiteTemplate, getSiteTemplateById, getSiteTemplates, updateSiteTemplate } = await import("@/lib/templates");
+    const seededTemplates = await getSiteTemplates();
+    assert.equal(seededTemplates.filter((template) => template.kind === "header").length, 1);
+    assert.equal(seededTemplates.filter((template) => template.kind === "footer").length, 1);
+    const seededHeader = seededTemplates.find((template) => template.kind === "header" && template.isActive);
+    assert.ok(seededHeader);
+    assert.equal((await getActiveSiteTemplate("header"))?.id, seededHeader.id);
+    const managedHeader = await createSiteTemplate({ kind: "header", name: "Synthetic alternate header", status: "draft", isActive: false, blocks: [] }, "user_test_admin");
+    assert.equal(managedHeader.status, "draft");
+    const activatedHeader = await updateSiteTemplate(managedHeader.id, { kind: managedHeader.kind, name: managedHeader.name, status: "published", isActive: true, blocks: managedHeader.blocks }, "user_test_admin");
+    assert.equal(activatedHeader.isActive, true);
+    assert.equal((await getActiveSiteTemplate("header"))?.id, managedHeader.id);
+    assert.equal((await getSiteTemplateById(seededHeader.id))?.isActive, false);
+    await assert.rejects(archiveSiteTemplate(managedHeader.id, "user_test_admin"), /active template/);
+    await updateSiteTemplate(managedHeader.id, { kind: managedHeader.kind, name: managedHeader.name, status: "draft", isActive: false, blocks: managedHeader.blocks }, "user_test_admin");
+    await archiveSiteTemplate(managedHeader.id, "user_test_admin");
+    assert.equal((await getSiteTemplateById(managedHeader.id))?.status, "archived");
+    const restoredHeader = await updateSiteTemplate(managedHeader.id, { kind: managedHeader.kind, name: managedHeader.name, status: "draft", isActive: false, blocks: managedHeader.blocks }, "user_test_admin");
+    assert.equal(restoredHeader.status, "draft");
+    await updateSiteTemplate(seededHeader.id, { kind: seededHeader.kind, name: seededHeader.name, status: "published", isActive: true, blocks: seededHeader.blocks }, "user_test_admin");
+    assert.equal((await getActiveSiteTemplate("header"))?.id, seededHeader.id);
     const { createAttendeeAccount } = await import("@/lib/auth");
     const testCustomer = await createAttendeeAccount({ name: "Synthetic Checkout Customer", username: "checkout-customer", email: "checkout.customer@example.test", password: "synthetic-test-password" });
     const privateCustomer = await createAttendeeAccount({ name: "Synthetic Private Customer", username: "private-customer", email: "free.private@example.test", password: "synthetic-private-password" });

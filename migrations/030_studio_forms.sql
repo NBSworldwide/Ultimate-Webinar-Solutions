@@ -3,9 +3,9 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS favicon_url TEXT NOT NULL DEF
 CREATE TABLE IF NOT EXISTS appearance_settings (
   id TEXT PRIMARY KEY CHECK (id = 'default'),
   content_width INTEGER NOT NULL DEFAULT 1180 CHECK (content_width BETWEEN 960 AND 1600),
-  container_padding INTEGER NOT NULL DEFAULT 24 CHECK (container_padding BETWEEN 0 AND 160),
-  column_gap INTEGER NOT NULL DEFAULT 24 CHECK (column_gap BETWEEN 0 AND 300),
-  row_gap INTEGER NOT NULL DEFAULT 24 CHECK (row_gap BETWEEN 0 AND 300),
+  container_padding INTEGER NOT NULL DEFAULT 20 CHECK (container_padding BETWEEN 0 AND 160),
+  column_gap INTEGER NOT NULL DEFAULT 20 CHECK (column_gap BETWEEN 0 AND 300),
+  row_gap INTEGER NOT NULL DEFAULT 20 CHECK (row_gap BETWEEN 0 AND 300),
   page_title_selector TEXT NOT NULL DEFAULT 'h1',
   stretch_sections BOOLEAN NOT NULL DEFAULT TRUE,
   default_page_layout TEXT NOT NULL DEFAULT 'full_width' CHECK (default_page_layout IN ('full_width', 'boxed')),

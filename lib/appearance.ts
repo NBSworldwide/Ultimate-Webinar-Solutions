@@ -53,9 +53,9 @@ const DEFAULT_BREAKPOINTS = { widescreen: 1600, desktop: 1200, laptop: 1024, tab
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   id: "default",
   contentWidth: 1180,
-  containerPadding: 24,
-  columnGap: 24,
-  rowGap: 24,
+  containerPadding: 20,
+  columnGap: 20,
+  rowGap: 20,
   pageTitleSelector: "h1",
   stretchSections: true,
   defaultPageLayout: "full_width",

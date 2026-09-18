@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarDays, CircleHelp, ClipboardList, ClipboardPenLine, ContactRound, FileText, Images, LayoutDashboard, Layers3, LockKeyhole, Mail, MapPin, Menu, MessageSquareText, Package, Percent, Settings2, Sparkles, UserRound, UsersRound, Warehouse } from "lucide-react";
+import { BarChart3, CalendarDays, CircleHelp, ClipboardList, ClipboardPenLine, ContactRound, FileText, Images, LayoutDashboard, LayoutTemplate, Layers3, LockKeyhole, Mail, MapPin, Menu, MessageSquareText, Package, Percent, Settings2, Sparkles, UserRound, UsersRound, Warehouse } from "lucide-react";
 import type { User } from "@/lib/types";
 import type { SiteSettings } from "@/lib/types";
 import { hasCapability, roleLabel } from "@/lib/authorization";
@@ -75,7 +75,8 @@ export function AdminShell({ user, settings, children }: { user: User; settings:
           <Link href="/account" className={`nav-item ${pathname === "/account" ? "nav-item-active" : ""}`}><UserRound size={18} /><span>My account</span></Link>
           {hasCapability(user, "team.view") ? <Link href="/admin/team" className={`nav-item ${pathname.startsWith("/admin/team") ? "nav-item-active" : ""}`}><UsersRound size={18} /><span>Team & access</span></Link> : null}
           {hasCapability(user, "appearance.manage") ? <Link href="/admin/navigation" className={`nav-item ${pathname.startsWith("/admin/navigation") ? "nav-item-active" : ""}`}><Menu size={18} /><span>Navigation</span></Link> : null}
-          {hasCapability(user, "appearance.manage") ? <Link href="/admin/appearance" className={`nav-item ${pathname.startsWith("/admin/appearance") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Appearance</span></Link> : null}
+          {hasCapability(user, "appearance.manage") ? <Link href="/admin/appearance" className={`nav-item ${pathname === "/admin/appearance" ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Appearance</span></Link> : null}
+          {hasCapability(user, "appearance.manage") ? <Link href="/admin/appearance/templates" className={`nav-item ${pathname.startsWith("/admin/appearance/templates") ? "nav-item-active" : ""}`}><LayoutTemplate size={18} /><span>Header &amp; Footer</span></Link> : null}
           {hasCapability(user, "media.manage") ? <Link href="/admin/media" className={`nav-item ${pathname.startsWith("/admin/media") ? "nav-item-active" : ""}`}><Images size={18} /><span>Media library</span></Link> : null}
           {hasCapability(user, "settings.manage") ? <Link href="/admin/settings" className={`nav-item ${pathname.startsWith("/admin/settings") ? "nav-item-active" : ""}`}><Settings2 size={18} /><span>Site settings</span></Link> : null}
           <Link href="/admin/help" className={`nav-item ${pathname.startsWith("/admin/help") ? "nav-item-active" : ""}`}><CircleHelp size={18} /><span>Help center</span></Link>

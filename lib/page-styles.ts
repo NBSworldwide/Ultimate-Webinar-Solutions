@@ -1,4 +1,4 @@
-import type { PageBlockLayout, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber } from "@/lib/types";
+import type { PageBlockLayout, PageBlockLayoutResponsive, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber } from "@/lib/types";
 
 export const PAGE_STYLE_DEVICES: Array<{ key: PageStyleDevice; label: string }> = [
   { key: "widescreen", label: "Widescreen" },
@@ -114,13 +114,31 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     result.typography.wordSpacing = responsiveNumbers(typography.wordSpacing, -20, 80);
     const textAlign = enumValue(typography.textAlign, ["left", "center", "right", "justify"] as const);
     if (textAlign) result.typography.textAlign = textAlign;
+    const textStroke = record(typography.textStroke);
+    if (textStroke) {
+      result.typography.textStroke = {
+        width: responsiveNumbers(textStroke.width, 0, 20),
+        color: colorValue(textStroke.color),
+      };
+      if (result.typography.textStroke.width === undefined && result.typography.textStroke.color === undefined) delete result.typography.textStroke;
+    }
+    const textShadow = record(typography.textShadow);
+    if (textShadow) {
+      result.typography.textShadow = {
+        horizontal: responsiveNumbers(textShadow.horizontal, -200, 200),
+        vertical: responsiveNumbers(textShadow.vertical, -200, 200),
+        blur: responsiveNumbers(textShadow.blur, 0, 300),
+        color: colorValue(textShadow.color),
+      };
+      if (result.typography.textShadow.horizontal === undefined && result.typography.textShadow.vertical === undefined && result.typography.textShadow.blur === undefined && result.typography.textShadow.color === undefined) delete result.typography.textShadow;
+    }
     if (Object.keys(result.typography).length === 0) delete result.typography;
   }
 
   const background = record(source.background);
   if (background) {
     result.background = {};
-    const mode = enumValue(background.mode, ["none", "classic", "gradient"] as const);
+    const mode = enumValue(background.mode, ["none", "classic", "gradient", "video", "slideshow"] as const);
     if (mode) result.background.mode = mode;
     const color = colorValue(background.color);
     if (color) result.background.color = color;
@@ -143,6 +161,29 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     const gradientEndLocation = numberValue(background.gradientEndLocation, 0, 100);
     if (gradientEndLocation !== undefined) result.background.gradientEndLocation = Math.round(gradientEndLocation);
     result.background.angle = responsiveNumbers(background.angle, 0, 360);
+    const videoSource = enumValue(background.videoSource, ["youtube", "vimeo", "file"] as const);
+    if (videoSource) result.background.videoSource = videoSource;
+    const videoUrl = imageValue(background.videoUrl);
+    if (videoUrl) result.background.videoUrl = videoUrl;
+    const videoFallbackImage = imageValue(background.videoFallbackImage);
+    if (videoFallbackImage) result.background.videoFallbackImage = videoFallbackImage;
+    const videoStart = numberValue(background.videoStart, 0, 86_400);
+    const videoEnd = numberValue(background.videoEnd, 0, 86_400);
+    if (videoStart !== undefined) result.background.videoStart = Math.round(videoStart);
+    if (videoEnd !== undefined) result.background.videoEnd = Math.round(videoEnd);
+    if (Array.isArray(background.slideshowImages)) {
+      const images = background.slideshowImages.map((value) => imageValue(value)).filter((value): value is string => Boolean(value)).slice(0, 24);
+      if (images.length > 0) result.background.slideshowImages = images;
+    }
+    if (typeof background.slideshowInfinite === "boolean") result.background.slideshowInfinite = background.slideshowInfinite;
+    const slideshowDuration = numberValue(background.slideshowDuration, 1_000, 60_000);
+    const slideshowTransitionDuration = numberValue(background.slideshowTransitionDuration, 100, 10_000);
+    if (slideshowDuration !== undefined) result.background.slideshowDuration = Math.round(slideshowDuration);
+    if (slideshowTransitionDuration !== undefined) result.background.slideshowTransitionDuration = Math.round(slideshowTransitionDuration);
+    const slideshowTransition = enumValue(background.slideshowTransition, ["fade", "slide"] as const);
+    if (slideshowTransition) result.background.slideshowTransition = slideshowTransition;
+    if (typeof background.slideshowLazyLoad === "boolean") result.background.slideshowLazyLoad = background.slideshowLazyLoad;
+    if (typeof background.slideshowKenBurns === "boolean") result.background.slideshowKenBurns = background.slideshowKenBurns;
     if (Object.keys(result.background).length === 0) delete result.background;
   }
 
@@ -194,6 +235,42 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     if (Object.keys(result.mask).length === 0) delete result.mask;
   }
 
+  const widget = record(source.widget);
+  if (widget) {
+    result.widget = {};
+    const aspectRatio = enumValue(widget.aspectRatio, ["1/1", "3/2", "4/3", "16/9", "21/9", "9/16"] as const);
+    const imagePosition = enumValue(widget.imagePosition, ["left", "top", "right", "bottom"] as const);
+    const imageAlign = enumValue(widget.imageAlign, ["left", "center", "right"] as const);
+    if (aspectRatio) result.widget.aspectRatio = aspectRatio;
+    if (imagePosition) result.widget.imagePosition = imagePosition;
+    if (imageAlign) result.widget.imageAlign = imageAlign;
+    for (const key of ["imageSpacing", "contentSpacing"] as const) {
+      const value = numberValue(widget[key], 0, 300);
+      if (value !== undefined) result.widget[key] = Math.round(value);
+    }
+    result.widget.imageWidth = responsiveNumbers(widget.imageWidth, 0, 100);
+    result.widget.imageHeight = responsiveNumbers(widget.imageHeight, 0, 3_000);
+    result.widget.imageOpacity = responsiveNumbers(widget.imageOpacity, 0, 1);
+    result.widget.iconSize = responsiveNumbers(widget.iconSize, 8, 240);
+    result.widget.iconRotate = responsiveNumbers(widget.iconRotate, -360, 360);
+    const iconAlign = enumValue(widget.iconAlign, ["left", "center", "right"] as const);
+    if (iconAlign) result.widget.iconAlign = iconAlign;
+    const iconColor = colorValue(widget.iconColor);
+    if (iconColor) result.widget.iconColor = iconColor;
+    const filter = record(widget.filter);
+    if (filter) {
+      result.widget.filter = {
+        blur: responsiveNumbers(filter.blur, 0, 40),
+        brightness: responsiveNumbers(filter.brightness, 0, 3),
+        contrast: responsiveNumbers(filter.contrast, 0, 3),
+        saturation: responsiveNumbers(filter.saturation, 0, 3),
+        hue: responsiveNumbers(filter.hue, -180, 180),
+      };
+      if (Object.values(result.widget.filter).every((value) => value === undefined)) delete result.widget.filter;
+    }
+    if (Object.values(result.widget).every((value) => value === undefined)) delete result.widget;
+  }
+
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
@@ -206,13 +283,11 @@ const containerJustifyValues = ["start", "center", "end", "space-between", "spac
 const containerAlignValues = ["start", "center", "end", "stretch"] as const;
 const containerWrapValues = ["nowrap", "wrap"] as const;
 
-export function normalizePageBlockLayout(input: unknown): PageBlockLayout | undefined {
+function normalizePageBlockLayoutResponsive(input: unknown): PageBlockLayoutResponsive | undefined {
   const source = record(input);
   if (!source) return undefined;
-  const result: PageBlockLayout = {};
-  const mode = enumValue(source.mode, containerModes);
+  const result: PageBlockLayoutResponsive = {};
   const contentWidth = enumValue(source.contentWidth, containerContentWidths);
-  const spacing = enumValue(source.spacing, containerSpacing);
   const widthUnit = enumValue(source.widthUnit, containerMeasureUnits);
   const minHeightUnit = enumValue(source.minHeightUnit, containerMeasureUnits);
   const direction = enumValue(source.direction, containerDirections);
@@ -221,9 +296,7 @@ export function normalizePageBlockLayout(input: unknown): PageBlockLayout | unde
   const wrap = enumValue(source.wrap, containerWrapValues);
   const autoFlow = enumValue(source.autoFlow, ["row", "column"] as const);
   const justifyItems = enumValue(source.justifyItems, containerAlignValues);
-  if (mode) result.mode = mode;
   if (contentWidth) result.contentWidth = contentWidth;
-  if (spacing) result.spacing = spacing;
   if (widthUnit) result.widthUnit = widthUnit;
   if (minHeightUnit) result.minHeightUnit = minHeightUnit;
   if (direction) result.direction = direction;
@@ -244,7 +317,65 @@ export function normalizePageBlockLayout(input: unknown): PageBlockLayout | unde
   if (rowGap !== undefined) result.rowGap = Math.round(rowGap);
   if (columns !== undefined) result.columns = Math.round(columns);
   if (rows !== undefined) result.rows = Math.round(rows);
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+export function normalizePageBlockLayout(input: unknown): PageBlockLayout | undefined {
+  const source = record(input);
+  if (!source) return undefined;
+  const result: PageBlockLayout = {};
+  const mode = enumValue(source.mode, containerModes);
+  const contentWidth = enumValue(source.contentWidth, containerContentWidths);
+  const spacing = enumValue(source.spacing, containerSpacing);
+  const widthUnit = enumValue(source.widthUnit, containerMeasureUnits);
+  const minHeightUnit = enumValue(source.minHeightUnit, containerMeasureUnits);
+  const direction = enumValue(source.direction, containerDirections);
+  const justifyContent = enumValue(source.justifyContent, containerJustifyValues);
+  const alignItems = enumValue(source.alignItems, containerAlignValues);
+  const wrap = enumValue(source.wrap, containerWrapValues);
+  const autoFlow = enumValue(source.autoFlow, ["row", "column"] as const);
+  const justifyItems = enumValue(source.justifyItems, containerAlignValues);
+  const overflow = enumValue(source.overflow, ["visible", "hidden", "scroll", "auto"] as const);
+  const htmlTag = enumValue(source.htmlTag, ["div", "header", "footer", "main", "article", "section", "aside", "nav", "a"] as const);
+  const linkUrl = imageValue(source.linkUrl);
+  const linkTarget = enumValue(source.linkTarget, ["same", "new"] as const);
+  if (mode) result.mode = mode;
+  if (contentWidth) result.contentWidth = contentWidth;
+  if (spacing) result.spacing = spacing;
+  if (widthUnit) result.widthUnit = widthUnit;
+  if (minHeightUnit) result.minHeightUnit = minHeightUnit;
+  if (direction) result.direction = direction;
+  if (justifyContent) result.justifyContent = justifyContent;
+  if (alignItems) result.alignItems = alignItems;
+  if (wrap) result.wrap = wrap;
+  if (autoFlow) result.autoFlow = autoFlow;
+  if (justifyItems) result.justifyItems = justifyItems;
+  if (overflow) result.overflow = overflow;
+  if (htmlTag) result.htmlTag = htmlTag;
+  if (linkUrl) result.linkUrl = linkUrl;
+  if (linkTarget) result.linkTarget = linkTarget;
+  const width = numberValue(source.width, 0, 3_000);
+  const minHeight = numberValue(source.minHeight, 0, 3_000);
+  const columnGap = numberValue(source.columnGap, 0, 300);
+  const rowGap = numberValue(source.rowGap, 0, 300);
+  const columns = numberValue(source.columns, 1, 6);
+  const rows = numberValue(source.rows, 1, 12);
+  if (width !== undefined) result.width = Math.round(width);
+  if (minHeight !== undefined) result.minHeight = Math.round(minHeight);
+  if (columnGap !== undefined) result.columnGap = Math.round(columnGap);
+  if (rowGap !== undefined) result.rowGap = Math.round(rowGap);
+  if (columns !== undefined) result.columns = Math.round(columns);
+  if (rows !== undefined) result.rows = Math.round(rows);
   if (typeof source.gridOutline === "boolean") result.gridOutline = source.gridOutline;
+  const responsive = record(source.responsive);
+  if (responsive) {
+    const normalized: NonNullable<PageBlockLayout["responsive"]> = {};
+    for (const { key } of PAGE_STYLE_DEVICES) {
+      const next = normalizePageBlockLayoutResponsive(responsive[key]);
+      if (next) normalized[key] = next;
+    }
+    if (Object.keys(normalized).length > 0) result.responsive = normalized;
+  }
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
@@ -301,6 +432,37 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
   setResponsiveEdgeVariables(css, "--block-margin", style.margin, (value) => `${value}px`);
   setResponsiveEdgeVariables(css, "--block-padding", style.padding, (value) => `${value}px`);
 
+  const widget = style.widget;
+  if (widget) {
+    if (widget.aspectRatio) css["--widget-aspect-ratio"] = widget.aspectRatio.replace("/", " / ");
+    if (widget.imagePosition) {
+      css["--widget-image-position"] = widget.imagePosition;
+      css["--widget-image-grid-template"] = widget.imagePosition === "left" || widget.imagePosition === "right" ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)";
+      css["--widget-image-media-order"] = widget.imagePosition === "right" || widget.imagePosition === "bottom" ? "2" : "1";
+      css["--widget-image-copy-order"] = widget.imagePosition === "right" || widget.imagePosition === "bottom" ? "1" : "2";
+    }
+    if (widget.imageAlign) css["--widget-image-align"] = widget.imageAlign;
+    if (widget.imageSpacing !== undefined) css["--widget-image-spacing"] = `${widget.imageSpacing}px`;
+    if (widget.contentSpacing !== undefined) css["--widget-content-spacing"] = `${widget.contentSpacing}px`;
+    setResponsiveVariable(css, "--widget-image-width", widget.imageWidth, (value) => `${value}%`);
+    setResponsiveVariable(css, "--widget-image-height", widget.imageHeight, (value) => `${value}px`);
+    setResponsiveVariable(css, "--widget-image-opacity", widget.imageOpacity, String);
+    setResponsiveVariable(css, "--widget-icon-size", widget.iconSize, (value) => `${value}px`);
+    setResponsiveVariable(css, "--widget-icon-rotate", widget.iconRotate, (value) => `${value}deg`);
+    if (widget.iconAlign) css["--widget-icon-align"] = widget.iconAlign;
+    if (widget.iconColor) css["--widget-icon-color"] = widget.iconColor;
+    if (widget.filter) {
+      for (const device of deviceKeys) {
+        const blur = widget.filter.blur?.[device] ?? widget.filter.blur?.desktop ?? 0;
+        const brightness = widget.filter.brightness?.[device] ?? widget.filter.brightness?.desktop ?? 1;
+        const contrast = widget.filter.contrast?.[device] ?? widget.filter.contrast?.desktop ?? 1;
+        const saturation = widget.filter.saturation?.[device] ?? widget.filter.saturation?.desktop ?? 1;
+        const hue = widget.filter.hue?.[device] ?? widget.filter.hue?.desktop ?? 0;
+        css[`--widget-filter-${device}`] = `blur(${blur}px) brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) hue-rotate(${hue}deg)`;
+      }
+    }
+  }
+
   const typography = style.typography;
   if (typography) {
     if (typography.fontFamily && typography.fontFamily !== "default") css["--block-font-family"] = typography.fontFamily.includes(" ") ? `"${typography.fontFamily}"` : typography.fontFamily;
@@ -313,6 +475,17 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
     setResponsiveVariable(css, "--block-letter-spacing", typography.letterSpacing, (value) => `${value}px`);
     setResponsiveVariable(css, "--block-word-spacing", typography.wordSpacing, (value) => `${value}px`);
     if (typography.textAlign) css["--block-text-align"] = typography.textAlign;
+    if (typography.textStroke) {
+      setResponsiveVariable(css, "--block-text-stroke", typography.textStroke.width, (value) => `${value}px`);
+      if (typography.textStroke.color) css["--block-text-stroke-color"] = typography.textStroke.color;
+    }
+    if (typography.textShadow) {
+      const shadow = typography.textShadow;
+      if (shadow.color) css["--block-text-shadow-color"] = shadow.color;
+      setResponsiveVariable(css, "--block-text-shadow-x", shadow.horizontal, (value) => `${value}px`);
+      setResponsiveVariable(css, "--block-text-shadow-y", shadow.vertical, (value) => `${value}px`);
+      setResponsiveVariable(css, "--block-text-shadow-blur", shadow.blur, (value) => `${value}px`);
+    }
   }
 
   const background = style.background;
@@ -397,18 +570,37 @@ export function pageBlockLayoutToCss(input: PageBlockLayout | undefined): Record
   css["--container-auto-flow"] = layout.autoFlow ?? "row";
   css["--container-columns"] = String(Math.round(layout.columns ?? 2));
   css["--container-rows"] = String(Math.round(layout.rows ?? 1));
-  css["--container-column-gap"] = layout.columnGap === undefined ? "var(--global-column-gap, 24px)" : `${Math.round(layout.columnGap)}px`;
-  css["--container-row-gap"] = layout.rowGap === undefined ? "var(--global-row-gap, 24px)" : `${Math.round(layout.rowGap)}px`;
+  css["--container-column-gap"] = layout.columnGap === undefined ? "var(--global-column-gap, 20px)" : `${Math.round(layout.columnGap)}px`;
+  css["--container-row-gap"] = layout.rowGap === undefined ? "var(--global-row-gap, 20px)" : `${Math.round(layout.rowGap)}px`;
   css["--container-margin-top"] = spacing === "global" ? "0px" : "0px";
   css["--container-margin-right"] = spacing === "global" ? "0px" : "0px";
   css["--container-margin-bottom"] = spacing === "global" ? "0px" : "0px";
   css["--container-margin-left"] = spacing === "global" ? "0px" : "0px";
-  css["--container-padding-top"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
-  css["--container-padding-right"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
-  css["--container-padding-bottom"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
-  css["--container-padding-left"] = spacing === "global" ? "var(--container-padding, 24px)" : "0px";
+  css["--container-padding-top"] = spacing === "global" ? "var(--container-padding, 20px)" : "0px";
+  css["--container-padding-right"] = spacing === "global" ? "var(--container-padding, 20px)" : "0px";
+  css["--container-padding-bottom"] = spacing === "global" ? "var(--container-padding, 20px)" : "0px";
+  css["--container-padding-left"] = spacing === "global" ? "var(--container-padding, 20px)" : "0px";
   if (layout.width !== undefined) css["--container-width"] = `${layout.width}${layout.widthUnit ?? "px"}`;
   if (layout.minHeight !== undefined) css["--container-min-height"] = `${layout.minHeight}${layout.minHeightUnit ?? "px"}`;
   if (layout.gridOutline) css["--container-grid-outline"] = "1px dashed rgba(24, 59, 54, .28)";
+  if (layout.overflow) css["--container-overflow"] = layout.overflow;
+  for (const { key } of PAGE_STYLE_DEVICES) {
+    const override = layout.responsive?.[key];
+    if (!override) continue;
+    const suffix = `-${key}`;
+    if (override.contentWidth) css[`--container-content-width${suffix}`] = override.contentWidth === "full" ? "100%" : "min(100%, 1200px)";
+    if (override.direction) css[`--container-direction${suffix}`] = override.direction;
+    if (override.justifyContent) css[`--container-justify-content${suffix}`] = cssJustify[override.justifyContent];
+    if (override.alignItems) css[`--container-align-items${suffix}`] = cssAlign[override.alignItems];
+    if (override.justifyItems) css[`--container-justify-items${suffix}`] = cssAlign[override.justifyItems];
+    if (override.wrap) css[`--container-wrap${suffix}`] = override.wrap;
+    if (override.autoFlow) css[`--container-auto-flow${suffix}`] = override.autoFlow;
+    if (override.columns !== undefined) css[`--container-columns${suffix}`] = String(Math.round(override.columns));
+    if (override.rows !== undefined) css[`--container-rows${suffix}`] = String(Math.round(override.rows));
+    if (override.columnGap !== undefined) css[`--container-column-gap${suffix}`] = `${Math.round(override.columnGap)}px`;
+    if (override.rowGap !== undefined) css[`--container-row-gap${suffix}`] = `${Math.round(override.rowGap)}px`;
+    if (override.width !== undefined) css[`--container-width${suffix}`] = `${override.width}${override.widthUnit ?? layout.widthUnit ?? "px"}`;
+    if (override.minHeight !== undefined) css[`--container-min-height${suffix}`] = `${override.minHeight}${override.minHeightUnit ?? layout.minHeightUnit ?? "px"}`;
+  }
   return css;
 }

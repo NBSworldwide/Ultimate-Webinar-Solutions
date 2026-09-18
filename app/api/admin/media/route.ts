@@ -10,7 +10,7 @@ import { assertSameOrigin, RequestSecurityError } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 
-const extensionByType: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+const extensionByType: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg" };
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -27,8 +27,8 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const formData = await request.formData();
     const fileValue = formData.get("file");
-    if (!(fileValue instanceof File)) return NextResponse.json({ error: "Choose an image file to upload." }, { status: 400 });
-    if (!uploadableImageTypes.includes(fileValue.type as typeof uploadableImageTypes[number])) return NextResponse.json({ error: "Use a JPEG, PNG, WebP, or GIF image." }, { status: 400 });
+    if (!(fileValue instanceof File)) return NextResponse.json({ error: "Choose an image or SVG file to upload." }, { status: 400 });
+    if (!uploadableImageTypes.includes(fileValue.type as typeof uploadableImageTypes[number]) && fileValue.type !== "image/svg+xml") return NextResponse.json({ error: "Use a JPEG, PNG, WebP, GIF, or SVG image." }, { status: 400 });
     if (fileValue.size > 10 * 1024 * 1024) return NextResponse.json({ error: "Media files must be 10 MB or smaller." }, { status: 400 });
     const id = randomUUID();
     const extension = extensionByType[fileValue.type] ?? "bin";
@@ -44,6 +44,6 @@ export async function POST(request: Request) {
     if (storedPath) await unlink(storedPath).catch(() => undefined);
     if (error instanceof DomainError) return NextResponse.json({ error: error.message }, { status: error.statusCode });
     if (error instanceof RequestSecurityError) return NextResponse.json({ error: error.message }, { status: 403 });
-    return NextResponse.json({ error: "The image could not be uploaded." }, { status: 500 });
+    return NextResponse.json({ error: "The image or SVG could not be uploaded." }, { status: 500 });
   }
 }

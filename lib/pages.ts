@@ -7,7 +7,7 @@ import { hasMapCoordinateInput, normalizeMapLocation } from "@/lib/map-location"
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import type { ContentPage, PageBlock, PageBlockType, PageStatus } from "@/lib/types";
 
-const blockTypes: PageBlockType[] = ["hero", "heading", "rich_text", "image", "image_box", "icon_box", "video", "button", "cta", "product_grid", "product_category", "sale_grid", "gallery", "testimonial_grid", "navigation_menu", "form", "location_index", "location_detail", "html", "map", "spacer", "container"];
+const blockTypes: PageBlockType[] = ["hero", "heading", "rich_text", "image", "image_box", "icon", "icon_box", "video", "button", "cta", "product_grid", "product_category", "sale_grid", "gallery", "testimonial_grid", "navigation_menu", "form", "location_index", "location_detail", "html", "map", "spacer", "container"];
 const pageFields = `id, slug, title, excerpt, status, blocks_json, seo_title, seo_description,
   is_homepage, created_by, updated_by, created_at, updated_at, published_at`;
 

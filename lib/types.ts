@@ -2,7 +2,7 @@ import type { ThemeSettingsValues } from "@/lib/theme-presets";
 
 export type Role = "admin" | "manager" | "attendee";
 export type PageStatus = "draft" | "published" | "archived";
-export type PageBlockType = "hero" | "heading" | "rich_text" | "image" | "image_box" | "icon_box" | "video" | "button" | "cta" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid" | "navigation_menu" | "form" | "location_index" | "location_detail" | "html" | "map" | "spacer" | "container";
+export type PageBlockType = "hero" | "heading" | "rich_text" | "image" | "image_box" | "icon" | "icon_box" | "video" | "button" | "cta" | "product_grid" | "product_category" | "sale_grid" | "gallery" | "testimonial_grid" | "navigation_menu" | "form" | "location_index" | "location_detail" | "html" | "map" | "spacer" | "container";
 export type WebinarStatus = "draft" | "published" | "sold_out" | "completed";
 export type WebinarVisibility = "public" | "private";
 export type { EmailProvider, StreamingProvider } from "@/lib/integration-catalog";
@@ -378,16 +378,39 @@ export interface PageBlockLayout {
   autoFlow?: "row" | "column";
   justifyItems?: PageContainerAlign;
   gridOutline?: boolean;
+  overflow?: "visible" | "hidden" | "scroll" | "auto";
+  htmlTag?: "div" | "header" | "footer" | "main" | "article" | "section" | "aside" | "nav" | "a";
+  linkUrl?: string;
+  linkTarget?: "same" | "new";
+  responsive?: Partial<Record<PageStyleDevice, PageBlockLayoutResponsive>>;
 }
 
 export type PageStyleDevice = "widescreen" | "desktop" | "laptop" | "tabletLandscape" | "tabletPortrait" | "mobileLandscape" | "mobilePortrait";
+export interface PageBlockLayoutResponsive {
+  contentWidth?: PageContainerContentWidth;
+  width?: number;
+  widthUnit?: PageContainerMeasureUnit;
+  minHeight?: number;
+  minHeightUnit?: PageContainerMeasureUnit;
+  direction?: PageContainerDirection;
+  justifyContent?: PageContainerJustify;
+  alignItems?: PageContainerAlign;
+  columnGap?: number;
+  rowGap?: number;
+  wrap?: PageContainerWrap;
+  columns?: number;
+  rows?: number;
+  autoFlow?: "row" | "column";
+  justifyItems?: PageContainerAlign;
+}
 export type PageStyleNumber = Partial<Record<PageStyleDevice, number>>;
 export interface PageStyleEdges { top?: number; right?: number; bottom?: number; left?: number; }
 export type PageStyleBox = Partial<Record<PageStyleDevice, PageStyleEdges>>;
 export type PageStyleBorderType = "default" | "none" | "solid" | "double" | "dotted" | "dashed" | "groove";
-export type PageStyleBackgroundMode = "none" | "classic" | "gradient";
+export type PageStyleBackgroundMode = "none" | "classic" | "gradient" | "video" | "slideshow";
 export type PageStyleGradientType = "linear" | "radial";
 export type PageStyleMaskShape = "circle" | "oval" | "pill" | "pill-vertical" | "triangle" | "diamond" | "hexagon" | "blob" | "custom";
+export type PageStyleAspectRatio = "1/1" | "3/2" | "4/3" | "16/9" | "21/9" | "9/16";
 
 export interface PageBlockStyle {
   widthMode?: "default" | "full" | "inline" | "custom";
@@ -411,6 +434,8 @@ export interface PageBlockStyle {
     letterSpacing?: PageStyleNumber;
     wordSpacing?: PageStyleNumber;
     textAlign?: "left" | "center" | "right" | "justify";
+    textStroke?: { width?: PageStyleNumber; color?: string };
+    textShadow?: { horizontal?: PageStyleNumber; vertical?: PageStyleNumber; blur?: PageStyleNumber; color?: string };
   };
   background?: {
     mode?: PageStyleBackgroundMode;
@@ -425,6 +450,18 @@ export interface PageBlockStyle {
     gradientStartLocation?: number;
     gradientEndLocation?: number;
     angle?: PageStyleNumber;
+    videoSource?: "youtube" | "vimeo" | "file";
+    videoUrl?: string;
+    videoFallbackImage?: string;
+    videoStart?: number;
+    videoEnd?: number;
+    slideshowImages?: string[];
+    slideshowInfinite?: boolean;
+    slideshowDuration?: number;
+    slideshowTransition?: "fade" | "slide";
+    slideshowTransitionDuration?: number;
+    slideshowLazyLoad?: boolean;
+    slideshowKenBurns?: boolean;
   };
   hover?: { textColor?: string; backgroundColor?: string; opacity?: number; };
   border?: {
@@ -435,6 +472,21 @@ export interface PageBlockStyle {
     shadow?: { color?: string; horizontal?: number; vertical?: number; blur?: number; spread?: number; position?: "outline" | "inset"; };
   };
   mask?: { enabled?: boolean; shape?: PageStyleMaskShape; image?: string; };
+  widget?: {
+    aspectRatio?: PageStyleAspectRatio;
+    imagePosition?: "left" | "top" | "right" | "bottom";
+    imageAlign?: "left" | "center" | "right";
+    imageSpacing?: number;
+    contentSpacing?: number;
+    imageWidth?: PageStyleNumber;
+    imageHeight?: PageStyleNumber;
+    imageOpacity?: PageStyleNumber;
+    filter?: { blur?: PageStyleNumber; brightness?: PageStyleNumber; contrast?: PageStyleNumber; saturation?: PageStyleNumber; hue?: PageStyleNumber; };
+    iconColor?: string;
+    iconAlign?: "left" | "center" | "right";
+    iconSize?: PageStyleNumber;
+    iconRotate?: PageStyleNumber;
+  };
 }
 
 export interface ContentPage {
@@ -447,6 +499,24 @@ export interface ContentPage {
   blocks: PageBlock[];
   seoTitle: string;
   seoDescription: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  revision: number;
+}
+
+export type SiteTemplateKind = "header" | "footer";
+export type SiteTemplateStatus = Exclude<PageStatus, "draft"> | "draft";
+
+export interface SiteTemplate {
+  id: string;
+  kind: SiteTemplateKind;
+  name: string;
+  status: SiteTemplateStatus;
+  isActive: boolean;
+  blocks: PageBlock[];
   createdBy: string | null;
   updatedBy: string | null;
   createdAt: string;

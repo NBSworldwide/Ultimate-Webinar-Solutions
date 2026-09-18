@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
-import { AlignLeft, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPenLine, Code2, Copy, GripVertical, Heading1, Image, LayoutTemplate, MapPin, Menu, Megaphone, Minus, MousePointer, Package, Pencil, Plus, Save, Trash2, Type, Video, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPenLine, Code2, Copy, GripVertical, Image, LayoutTemplate, MapPin, MapPinned, Menu, Megaphone, Minus, MousePointerClick, Package, Pencil, Plus, Save, Trash2, Type, Video, X } from "lucide-react";
 import Link from "next/link";
 import { PageRenderer } from "@/components/page-renderer";
 import { PageBlockStyleFields } from "@/components/page-block-style-fields";
+import { MediaPicker } from "@/components/media-picker";
+import { sanitizeHtml } from "@/lib/sanitize-html";
+import { PAGE_STYLE_DEVICES } from "@/lib/page-styles";
 import type { NavigationMenuView } from "@/lib/navigation";
 import type { ManagedServiceLocation } from "@/lib/service-locations";
 import type {
   ContentPage,
   PageBlock,
   PageBlockLayout,
+  PageBlockLayoutResponsive,
   PageBlockStyle,
   PageBlockType,
   PageContainerAlign,
@@ -21,29 +25,38 @@ import type {
   PageContainerMode,
   PageContainerSpacing,
   PageContainerWrap,
+  PageStyleDevice,
+  PageStyleBox,
+  PageStyleEdges,
   PageStatus,
   FormDefinition,
+  SiteTemplate,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
 type BlockPath = number[];
+function isFallbackSiteTemplate(template: Pick<SiteTemplate, "id"> | null | undefined): boolean {
+  return Boolean(template?.id.startsWith("fallback-"));
+}
+
 type LibraryCategory = "layout" | "basic";
-type BlockLibraryItem = { key: string; type: PageBlockType; label: string; shortLabel?: string; description: string; icon: typeof LayoutTemplate; category: LibraryCategory; layoutMode?: PageContainerMode };
+type BlockLibraryItem = { key: string; type: PageBlockType; label: string; shortLabel?: string; description: string; icon: ComponentType<{ size?: number }>; category: LibraryCategory; layoutMode?: PageContainerMode };
 
 const blockLibrary: BlockLibraryItem[] = [
-  { key: "container", type: "container", label: "Container", description: "Build a nested Flexbox layout.", icon: LayoutTemplate, category: "layout", layoutMode: "flex" },
-  { key: "grid", type: "container", label: "Grid", description: "Create responsive grid columns.", icon: LayoutTemplate, category: "layout", layoutMode: "grid" },
+  { key: "container", type: "container", label: "Container", description: "Build a nested Flexbox layout.", icon: ContainerTileIcon, category: "layout", layoutMode: "flex" },
+  { key: "grid", type: "container", label: "Grid", description: "Create responsive grid columns.", icon: GridTileIcon, category: "layout", layoutMode: "grid" },
   { key: "hero", type: "hero", label: "Hero", description: "Lead with a headline and call to action.", icon: LayoutTemplate, category: "basic" },
-  { key: "heading", type: "heading", label: "Heading", description: "Add a semantic heading with optional link.", icon: Heading1, category: "basic" },
-  { key: "rich_text", type: "rich_text", label: "Text editor", shortLabel: "Text", description: "Add formatted copy with a visual editor.", icon: AlignLeft, category: "basic" },
+  { key: "heading", type: "heading", label: "Heading", description: "Add a semantic heading with optional link.", icon: HeadingTileIcon, category: "basic" },
+  { key: "rich_text", type: "rich_text", label: "Text editor", shortLabel: "Text", description: "Add formatted copy with a visual editor.", icon: TextTileIcon, category: "basic" },
   { key: "image", type: "image", label: "Image", description: "Show a hosted image with alt text.", icon: Image, category: "basic" },
-  { key: "image_box", type: "image_box", label: "Image box", description: "Combine an image, title, description, and link.", icon: Image, category: "basic" },
-  { key: "icon_box", type: "icon_box", label: "Icon box", description: "Use a library icon with supporting content.", icon: LayoutTemplate, category: "basic" },
+  { key: "image_box", type: "image_box", label: "Image box", description: "Combine an image, title, description, and link.", icon: ImageBoxTileIcon, category: "basic" },
+  { key: "icon", type: "icon", label: "Icon", description: "Add a standalone library or custom SVG icon.", icon: IconTileIcon, category: "basic" },
+  { key: "icon_box", type: "icon_box", label: "Icon box", description: "Use a library icon with supporting content.", icon: IconBoxTileIcon, category: "basic" },
   { key: "video", type: "video", label: "Video", description: "Embed a YouTube, Vimeo, or hosted video.", icon: Video, category: "basic" },
-  { key: "map", type: "map", label: "Google Maps", description: "Show a location with a safe map embed.", icon: LayoutTemplate, category: "basic" },
-  { key: "location_index", type: "location_index", label: "Service locations", shortLabel: "Locations", description: "Show the editable page's live service-area directory.", icon: MapPin, category: "basic" },
+  { key: "map", type: "map", label: "Google Maps", description: "Show a location with a safe map embed.", icon: MapPinned, category: "basic" },
+  { key: "location_index", type: "location_index", label: "Service locations", shortLabel: "Locations", description: "Show the editable page's live service-area directory.", icon: LocationsTileIcon, category: "basic" },
   { key: "location_detail", type: "location_detail", label: "Service location template", shortLabel: "Location", description: "Render a managed service-area detail page.", icon: MapPin, category: "basic" },
-  { key: "button", type: "button", label: "Button", description: "Add a styled link or call to action.", icon: MousePointer, category: "basic" },
+  { key: "button", type: "button", label: "Button", description: "Add a styled link or call to action.", icon: MousePointerClick, category: "basic" },
   { key: "cta", type: "cta", label: "Call to action", shortLabel: "CTA", description: "Close with a focused next step.", icon: Megaphone, category: "basic" },
   { key: "product_grid", type: "product_grid", label: "Product grid", shortLabel: "Products", description: "Feature purchasable products on a page.", icon: Package, category: "basic" },
   { key: "product_category", type: "product_category", label: "Product category", shortLabel: "Category", description: "Show a filtered collection of products.", icon: Package, category: "basic" },
@@ -79,6 +92,43 @@ const iconNames = [
   { value: "linkedin", label: "LinkedIn" },
 ] as const;
 
+function LocationsTileIcon({ size = 18 }: { size?: number }) {
+  const pinSize = Math.max(9, Math.round(size * 0.58));
+  return <span className="page-block-location-icon" aria-hidden="true" style={{ width: size, height: size }}><MapPin size={pinSize} strokeWidth={2.2} style={{ left: 0, top: Math.round(size * 0.35) }} /><MapPin size={pinSize} strokeWidth={2.2} style={{ left: Math.round(size * 0.28), top: 0 }} /><MapPin size={pinSize} strokeWidth={2.2} style={{ left: Math.round(size * 0.5), top: Math.round(size * 0.3) }} /></span>;
+}
+
+function TileSvg({ size = 18, children }: { size?: number; children: ReactNode }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
+}
+
+function ContainerTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M7 8h10M7 12h10M7 16h6" /></TileSvg>;
+}
+
+function GridTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="3" width="8" height="8" rx="1" /><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /></TileSvg>;
+}
+
+function HeadingTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><path d="M5 5h14M12 5v14M8.5 19h7" /></TileSvg>;
+}
+
+function TextTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><path d="M4 6h16M4 10h16M4 14h12M4 18h8" /></TileSvg>;
+}
+
+function ImageBoxTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><rect x="3" y="3" width="18" height="11" rx="1.5" /><circle cx="8" cy="7" r="1.3" /><path d="m4 13 4-4 3 3 2-2 7 5M4 18h13M4 21h10" /></TileSvg>;
+}
+
+function IconBoxTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><circle cx="9" cy="8" r="4.5" /><path d="m9 5.5.8 1.7 1.7.2-1.3 1.2.4 1.8L9 9.5l-1.6.9.4-1.8-1.3-1.2 1.7-.2L9 5.5ZM4 16h16M4 20h11" /></TileSvg>;
+}
+
+function IconTileIcon({ size = 18 }: { size?: number }) {
+  return <TileSvg size={size}><circle cx="12" cy="12" r="7" /><path d="m12 7 1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5L12 7Z" /></TileSvg>;
+}
+
 const containerPresets = [
   { key: "single", label: "Single column", description: "One full-width content area", mode: "flex" as const, slots: 1, widths: undefined, layout: { mode: "flex", direction: "column" } as PageBlockLayout },
   { key: "half", label: "50 / 50", description: "Two equal columns", mode: "flex" as const, slots: 2, widths: [50, 50], layout: { mode: "flex", direction: "row" } as PageBlockLayout },
@@ -100,17 +150,18 @@ function publicPath(slug: string, isHomepage = false): string { return isHomepag
 function newBlock(type: PageBlockType): PageBlock {
   const data: Record<string, string | number> = type === "hero"
     ? { eyebrow: "Featured content", heading: "A page built for your audience.", body: "Introduce this page with clear, useful context.", ctaLabel: "Explore sessions", ctaHref: "/webinars" }
-    : type === "heading" ? { text: "A clear section heading", tag: "h2", link: "", linkTarget: "same", linkNofollow: "no" }
+    : type === "heading" ? { text: "A clear section heading", tag: "h2", link: "", linkTarget: "same", linkNofollow: "no", linkAttributes: "" }
       : type === "rich_text" ? { heading: "A useful section", body: "Add the supporting content your visitors need here.", textColor: "", fontSize: "medium", textAlign: "left" }
       : type === "image" ? { src: "", alt: "", caption: "", imageResolution: "full", imageLinkMode: "none", imageLink: "" }
         : type === "image_box" ? { src: "", imageResolution: "full", title: "Feature title", description: "Describe this feature for your visitors.", imageLink: "", titleTag: "h3" }
-          : type === "icon_box" ? { iconSource: "fontawesome-solid", iconName: "shield", iconView: "framed", iconUrl: "", title: "Feature title", description: "Describe this feature for your visitors.", link: "", titleTag: "h3" }
-          : type === "video" ? { source: "youtube", url: "", start: 0, end: 0, autoplay: "no", mute: "no", loop: "no", controls: "yes", captions: "no", privacy: "yes", lazy: "yes", overlay: "hide", overlayImage: "", overlayAlt: "Video preview" }
-          : type === "map" ? { locationMode: "address", address: "", latitude: "", longitude: "", zoom: 10, height: 360 }
+          : type === "icon" ? { iconSource: "fontawesome-solid", iconName: "sparkles", iconView: "default", iconUrl: "", link: "", linkTarget: "same", linkNofollow: "no" }
+            : type === "icon_box" ? { iconSource: "fontawesome-solid", iconName: "shield", iconView: "framed", iconUrl: "", title: "Feature title", description: "Describe this feature for your visitors.", link: "", titleTag: "h3" }
+          : type === "video" ? { source: "youtube", url: "", start: 0, end: 0, autoplay: "no", mute: "no", loop: "no", controls: "yes", captions: "no", captionsUrl: "", suggestedVideos: "no", privacy: "yes", lazy: "yes", overlay: "hide", overlayPlayIcon: "yes", overlayLightbox: "no", overlayImage: "", overlayAlt: "Video preview" }
+          : type === "map" ? { locationMode: "address", address: "", latitude: "", longitude: "", zoom: 10, height: 360, showPlaceCard: "no", placeQuery: "" }
                               : type === "location_index" ? { heading: "Sample service locations" }
                                 : type === "location_detail" ? { locationSlug: "" }
               : type === "button" ? { buttonLabel: "Explore sessions", buttonHref: "/webinars", buttonType: "default", buttonIcon: "", buttonIconPosition: "left", buttonId: "" }
-              : type === "cta" ? { heading: "Ready for the next step?", body: "Give visitors one clear action to take next.", buttonLabel: "Contact us", buttonHref: "/login" }
+              : type === "cta" ? { graphicType: "none", graphicImage: "", graphicIcon: "sparkles", heading: "Ready for the next step?", titleTag: "h2", body: "Give visitors one clear action to take next.", descriptionTag: "p", buttonLabel: "Contact us", buttonHref: "/login", buttonTarget: "same", buttonNofollow: "no", ribbonText: "Next step" }
                   : type === "product_grid" ? { heading: "Featured products", category: "", columns: 3, itemsPerPage: 6, pagination: "numbers", sort: "name-asc", showImage: "yes", showSku: "yes", showDescription: "yes", showPrice: "yes", showInventory: "yes", showButton: "yes", buttonLabel: "View product", cardStyle: "card" }
                   : type === "product_category" ? { heading: "Shop the collection", category: "Event kits", columns: 3, itemsPerPage: 6, pagination: "numbers", sort: "name-asc", showImage: "yes", showSku: "yes", showDescription: "yes", showPrice: "yes", showInventory: "yes", showButton: "yes", buttonLabel: "View product", cardStyle: "card" }
                     : type === "sale_grid" ? { heading: "Limited-time offers", category: "", columns: 3, itemsPerPage: 6, pagination: "numbers", sort: "price-asc", showImage: "yes", showSku: "yes", showDescription: "yes", showPrice: "yes", showInventory: "yes", showButton: "yes", buttonLabel: "View product", cardStyle: "card" }
@@ -325,10 +376,10 @@ function ContainerFields({ block, onChange, onPreset }: { block: PageBlock; onCh
     </div>
     <div className="page-style-grid">
       <div className="field page-container-fixed-type"><span>Layout type</span><strong>{mode === "grid" ? "Grid" : "Flexbox"}</strong><small>This type is fixed by the Layout tile or preset used to create the container.</small></div>
-      <label className="field"><span>Spacing preset</span><select value={spacing} onChange={(event) => { const next = event.target.value as PageContainerSpacing; onChange({ ...layout, spacing: next, columnGap: next === "global" ? undefined : layout.columnGap ?? 24, rowGap: next === "global" ? undefined : layout.rowGap ?? 24 }); }}><option value="global">Global site preset</option><option value="custom">Custom for this container</option></select><small>Global uses Site Settings padding and gap defaults.</small></label>
+      <label className="field"><span>Spacing preset</span><select value={spacing} onChange={(event) => { const next = event.target.value as PageContainerSpacing; onChange({ ...layout, spacing: next, columnGap: next === "global" ? undefined : layout.columnGap ?? 20, rowGap: next === "global" ? undefined : layout.rowGap ?? 20 }); }}><option value="global">Global site preset</option><option value="custom">Custom for this container</option></select><small>Global uses Site Settings padding and gap defaults.</small></label>
       <label className="field"><span>Content width</span><select value={layout.contentWidth ?? "boxed"} onChange={(event) => onChange({ ...layout, contentWidth: event.target.value as PageContainerContentWidth })}><option value="boxed">Boxed</option><option value="full">Full width</option></select></label>
-      <label className="field"><span>Width</span><span className="page-container-measure"><input type="number" min="0" max="3000" value={layout.width ?? ""} onChange={(event) => onChange({ ...layout, width: numberValue(event.target.value) })} /><select aria-label="Width unit" value={layout.widthUnit ?? "px"} onChange={(event) => onChange({ ...layout, widthUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "%", "em", "rem", "vw"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
-      <label className="field"><span>Minimum height</span><span className="page-container-measure"><input type="number" min="0" max="3000" value={layout.minHeight ?? ""} onChange={(event) => onChange({ ...layout, minHeight: numberValue(event.target.value) })} /><select aria-label="Minimum height unit" value={layout.minHeightUnit ?? "px"} onChange={(event) => onChange({ ...layout, minHeightUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "em", "rem", "vh"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
+      <label className="field"><span>Width</span><input type="range" min="0" max="3000" value={layout.width ?? 1200} onChange={(event) => onChange({ ...layout, width: numberValue(event.target.value) })} /><span className="page-container-measure"><input type="number" min="0" max="3000" value={layout.width ?? ""} onChange={(event) => onChange({ ...layout, width: numberValue(event.target.value) })} /><select aria-label="Width unit" value={layout.widthUnit ?? "px"} onChange={(event) => onChange({ ...layout, widthUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "%", "em", "rem", "vw"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
+      <label className="field"><span>Minimum height</span><input type="range" min="0" max="3000" value={layout.minHeight ?? 480} onChange={(event) => onChange({ ...layout, minHeight: numberValue(event.target.value) })} /><span className="page-container-measure"><input type="number" min="0" max="3000" value={layout.minHeight ?? ""} onChange={(event) => onChange({ ...layout, minHeight: numberValue(event.target.value) })} /><select aria-label="Minimum height unit" value={layout.minHeightUnit ?? "px"} onChange={(event) => onChange({ ...layout, minHeightUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "em", "rem", "vh"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
     </div>
     {mode === "flex" ? <div className="page-style-grid">
       <label className="field"><span>Direction</span><select value={layout.direction ?? "column"} onChange={(event) => onChange({ ...layout, direction: event.target.value as PageContainerDirection })}><option value="row">Row</option><option value="column">Column</option><option value="row-reverse">Row reversed</option><option value="column-reverse">Column reversed</option></select></label>
@@ -343,17 +394,69 @@ function ContainerFields({ block, onChange, onPreset }: { block: PageBlock; onCh
       <label className="field"><span>Grid outline</span><select value={layout.gridOutline ? "on" : "off"} onChange={(event) => onChange({ ...layout, gridOutline: event.target.value === "on" })}><option value="off">Hidden</option><option value="on">Show outline</option></select></label>
     </div>}
     <div className="page-style-grid">
-      <label className="field"><span>Column gap</span><input type="number" min="0" max="300" value={layout.columnGap ?? 24} disabled={spacing === "global"} onChange={(event) => onChange({ ...layout, spacing: "custom", columnGap: numberValue(event.target.value) })} /><small>{spacing === "global" ? "Inherited from Site Settings." : "Pixels between columns."}</small></label>
-      <label className="field"><span>Row gap</span><input type="number" min="0" max="300" value={layout.rowGap ?? 24} disabled={spacing === "global"} onChange={(event) => onChange({ ...layout, spacing: "custom", rowGap: numberValue(event.target.value) })} /><small>{spacing === "global" ? "Inherited from Site Settings." : "Pixels between rows."}</small></label>
+      <label className="field"><span>Column gap</span><input type="number" min="0" max="300" value={layout.columnGap ?? 20} disabled={spacing === "global"} onChange={(event) => onChange({ ...layout, spacing: "custom", columnGap: numberValue(event.target.value) })} /><small>{spacing === "global" ? "Inherited from Site Settings." : "Pixels between columns."}</small></label>
+      <label className="field"><span>Row gap</span><input type="number" min="0" max="300" value={layout.rowGap ?? 20} disabled={spacing === "global"} onChange={(event) => onChange({ ...layout, spacing: "custom", rowGap: numberValue(event.target.value) })} /><small>{spacing === "global" ? "Inherited from Site Settings." : "Pixels between rows."}</small></label>
     </div>
+    <ResponsiveContainerFields layout={layout} mode={mode} onChange={onChange} />
+    <details className="page-builder-advanced-section"><summary>Additional options</summary><div className="page-style-grid"><label className="field"><span>Overflow</span><select value={layout.overflow ?? "visible"} onChange={(event) => onChange({ ...layout, overflow: event.target.value as PageBlockLayout["overflow"] })}><option value="visible">Visible</option><option value="hidden">Hidden</option><option value="auto">Auto scroll</option><option value="scroll">Always scroll</option></select></label><label className="field"><span>HTML tag</span><select value={layout.htmlTag ?? "section"} onChange={(event) => onChange({ ...layout, htmlTag: event.target.value as PageBlockLayout["htmlTag"] })}>{["div", "header", "footer", "main", "article", "section", "aside", "nav", "a"].map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></label></div>{layout.htmlTag === "a" ? <div className="form-row"><label className="field"><span>Container link</span><input type="url" value={layout.linkUrl ?? ""} onChange={(event) => onChange({ ...layout, linkUrl: event.target.value })} placeholder="https://example.com" /></label><label className="field"><span>Link target</span><select value={layout.linkTarget ?? "same"} onChange={(event) => onChange({ ...layout, linkTarget: event.target.value as PageBlockLayout["linkTarget"] })}><option value="same">Same window</option><option value="new">New window</option></select></label></div> : null}<small>Semantic tags change the wrapper without changing the layout. The link tag adds a safe destination to the container.</small></details>
   </div>;
+}
+
+function ResponsiveContainerFields({ layout, mode, onChange }: { layout: PageBlockLayout; mode: PageContainerMode; onChange: (layout: PageBlockLayout) => void }) {
+  const [device, setDevice] = useState<PageStyleDevice>("desktop");
+  const responsive = layout.responsive?.[device] ?? {};
+  const responsiveValue = <K extends keyof PageBlockLayoutResponsive>(key: K, fallback: PageBlockLayoutResponsive[K]): PageBlockLayoutResponsive[K] => (responsive[key] ?? layout[key] ?? fallback) as PageBlockLayoutResponsive[K];
+  const updateResponsive = (patch: Partial<PageBlockLayoutResponsive>) => onChange({ ...layout, responsive: { ...(layout.responsive ?? {}), [device]: { ...responsive, ...patch } } });
+  const resetResponsive = () => {
+    const nextResponsive = { ...(layout.responsive ?? {}) };
+    delete nextResponsive[device];
+    onChange({ ...layout, responsive: Object.keys(nextResponsive).length > 0 ? nextResponsive : undefined });
+  };
+  const width = responsiveValue("width", layout.width ?? 1200);
+  const minHeight = responsiveValue("minHeight", layout.minHeight ?? 480);
+  const widthUnit = responsiveValue("widthUnit", layout.widthUnit ?? "px");
+  const minHeightUnit = responsiveValue("minHeightUnit", layout.minHeightUnit ?? "px");
+  return <details className="page-builder-advanced-section" open>
+    <summary>Responsive layout overrides</summary>
+    <p className="field-help">Start with the desktop layout, then override the selected device without changing other breakpoints.</p>
+    <div className="page-style-device-tabs" role="tablist" aria-label="Container layout device"><span>Device</span>{PAGE_STYLE_DEVICES.map(({ key, label }) => <button type="button" key={key} className={device === key ? "is-active" : ""} onClick={() => setDevice(key)} role="tab" aria-selected={device === key}>{label}</button>)}</div>
+    <div className="page-style-grid">
+      <label className="field"><span>Content width</span><select value={responsiveValue("contentWidth", layout.contentWidth ?? "boxed")} onChange={(event) => updateResponsive({ contentWidth: event.target.value as PageContainerContentWidth })}><option value="boxed">Boxed</option><option value="full">Full width</option></select></label>
+      <label className="field"><span>Width</span><input type="range" min="0" max="3000" value={width} onChange={(event) => updateResponsive({ width: numberValue(event.target.value) })} /><span className="page-container-measure"><input type="number" min="0" max="3000" value={width} onChange={(event) => updateResponsive({ width: numberValue(event.target.value) })} /><select aria-label={`${device} width unit`} value={widthUnit} onChange={(event) => updateResponsive({ widthUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "%", "em", "rem", "vw"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
+      <label className="field"><span>Minimum height</span><input type="range" min="0" max="3000" value={minHeight} onChange={(event) => updateResponsive({ minHeight: numberValue(event.target.value) })} /><span className="page-container-measure"><input type="number" min="0" max="3000" value={minHeight} onChange={(event) => updateResponsive({ minHeight: numberValue(event.target.value) })} /><select aria-label={`${device} minimum height unit`} value={minHeightUnit} onChange={(event) => updateResponsive({ minHeightUnit: event.target.value as PageContainerMeasureUnit })}>{["px", "em", "rem", "vh"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></span></label>
+    </div>
+    {mode === "flex" ? <div className="page-style-grid">
+      <label className="field"><span>Direction</span><select value={responsiveValue("direction", layout.direction ?? "column")} onChange={(event) => updateResponsive({ direction: event.target.value as PageContainerDirection })}><option value="row">Row</option><option value="column">Column</option><option value="row-reverse">Row reversed</option><option value="column-reverse">Column reversed</option></select></label>
+      <label className="field"><span>Justify content</span><select value={responsiveValue("justifyContent", layout.justifyContent ?? "start")} onChange={(event) => updateResponsive({ justifyContent: event.target.value as PageContainerJustify })}><option value="start">Start</option><option value="center">Center</option><option value="end">End</option><option value="space-between">Space between</option><option value="space-around">Space around</option><option value="space-evenly">Space evenly</option></select></label>
+      <label className="field"><span>Align items</span><select value={responsiveValue("alignItems", layout.alignItems ?? "stretch")} onChange={(event) => updateResponsive({ alignItems: event.target.value as PageContainerAlign })}><option value="start">Start</option><option value="center">Center</option><option value="end">End</option><option value="stretch">Stretch</option></select></label>
+      <label className="field"><span>Wrap</span><select value={responsiveValue("wrap", layout.wrap ?? "nowrap")} onChange={(event) => updateResponsive({ wrap: event.target.value as PageContainerWrap })}><option value="nowrap">No wrap</option><option value="wrap">Wrap items</option></select></label>
+    </div> : <div className="page-style-grid">
+      <label className="field"><span>Columns</span><input type="number" min="1" max="6" step="1" value={responsiveValue("columns", layout.columns ?? 2)} onChange={(event) => updateResponsive({ columns: numberValue(event.target.value) })} /></label>
+      <label className="field"><span>Rows</span><input type="number" min="1" max="12" step="1" value={responsiveValue("rows", layout.rows ?? 1)} onChange={(event) => updateResponsive({ rows: numberValue(event.target.value) })} /></label>
+      <label className="field"><span>Auto flow</span><select value={responsiveValue("autoFlow", layout.autoFlow ?? "row")} onChange={(event) => updateResponsive({ autoFlow: event.target.value as "row" | "column" })}><option value="row">Row</option><option value="column">Column</option></select></label>
+      <label className="field"><span>Justify items</span><select value={responsiveValue("justifyItems", layout.justifyItems ?? "stretch")} onChange={(event) => updateResponsive({ justifyItems: event.target.value as PageContainerAlign })}><option value="start">Start</option><option value="center">Center</option><option value="end">End</option><option value="stretch">Stretch</option></select></label>
+    </div>}
+    <div className="page-style-grid">
+      <label className="field"><span>Column gap</span><input type="number" min="0" max="300" value={responsiveValue("columnGap", layout.columnGap ?? 20)} onChange={(event) => updateResponsive({ columnGap: numberValue(event.target.value) })} /><small>Pixels between columns.</small></label>
+      <label className="field"><span>Row gap</span><input type="number" min="0" max="300" value={responsiveValue("rowGap", layout.rowGap ?? 20)} onChange={(event) => updateResponsive({ rowGap: numberValue(event.target.value) })} /><small>Pixels between rows.</small></label>
+    </div>
+    <button type="button" className="button button-secondary button-small" onClick={resetResponsive} disabled={!layout.responsive?.[device]}>Reset {device} overrides</button>
+  </details>;
 }
 
 function RichTextFields({ block, onChange }: { block: PageBlock; onChange: (key: string, value: string | number) => void }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const visualRef = useRef<HTMLDivElement>(null);
   const body = String(block.data.body ?? "");
+  const [mode, setMode] = useState<"visual" | "code">("visual");
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
+
+  useEffect(() => {
+    if (mode !== "visual" || !visualRef.current || document.activeElement === visualRef.current) return;
+    const next = sanitizeHtml(body);
+    if (visualRef.current.innerHTML !== next) visualRef.current.innerHTML = next;
+  }, [body, mode]);
 
   function replaceSelection(before: string, after: string) {
     const textarea = textareaRef.current;
@@ -370,35 +473,55 @@ function RichTextFields({ block, onChange }: { block: PageBlock; onChange: (key:
     });
   }
 
+  function syncVisual() {
+    if (visualRef.current) onChange("body", sanitizeHtml(visualRef.current.innerHTML));
+  }
+
+  function runVisualCommand(command: string, value?: string) {
+    visualRef.current?.focus();
+    document.execCommand(command, false, value);
+    syncVisual();
+  }
+
+  function insertMarkup(markup: string) {
+    if (mode === "visual") {
+      runVisualCommand("insertHTML", sanitizeHtml(markup));
+      return;
+    }
+    replaceSelection(markup, "");
+  }
+
   function addImage() {
     const src = imageUrl.trim();
     if (!src) return;
-    replaceSelection(`<img src="${src}" alt="${imageAlt.trim() || "Content image"}" />`, "");
+    insertMarkup(`<img src="${src}" alt="${imageAlt.trim() || "Content image"}" />`);
     setImageUrl("");
     setImageAlt("");
   }
 
-  return <div className="page-builder-fields"><div className="field"><label htmlFor={`page-${block.id}-heading`}>Heading</label><input id={`page-${block.id}-heading`} value={String(block.data.heading ?? "")} onChange={(event) => onChange("heading", event.target.value)} /></div><div className="rich-text-toolbar" aria-label="Rich text formatting"><button type="button" className="button button-secondary button-small" onClick={() => replaceSelection("<u>", "</u>")}><u>Underline</u></button><label className="rich-text-tool"><span>Color</span><input type="color" value={String(block.data.textColor || "#52615e")} onChange={(event) => { const color = event.target.value; onChange("textColor", color); replaceSelection(`<span style="color:${color}">`, "</span>"); }} /></label><label className="rich-text-tool"><span>Size</span><select value={String(block.data.fontSize || "medium")} onChange={(event) => { const size = event.target.value; onChange("fontSize", size); const sizes: Record<string, string> = { small: "0.9rem", medium: "1rem", large: "1.2rem", xlarge: "1.5rem" }; replaceSelection(`<span style="font-size:${sizes[size] ?? sizes.medium}">`, "</span>"); }}><option value="small">Small</option><option value="medium">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><label className="rich-text-tool"><span>Align</span><select value={String(block.data.textAlign || "left")} onChange={(event) => onChange("textAlign", event.target.value)}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justified</option></select></label></div><textarea ref={textareaRef} id={`page-${block.id}-body`} value={body} onChange={(event) => onChange("body", event.target.value)} placeholder="Write plain text or use the toolbar for safe formatting." /><small>Plain text and safe HTML are supported. Formatting is sanitized on save; scripts, forms, and unsafe URLs are removed.</small><div className="rich-text-image-tools"><div className="field"><label htmlFor={`page-${block.id}-image-url`}>Insert image URL</label><input id={`page-${block.id}-image-url`} type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://images.example.com/photo.jpg" /></div><div className="field"><label htmlFor={`page-${block.id}-image-alt`}>Image alt text</label><input id={`page-${block.id}-image-alt`} value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Describe the image" /></div><button type="button" className="button button-secondary button-small" onClick={addImage}>Insert image</button></div></div>;
+  return <div className="page-builder-fields"><div className="field"><label htmlFor={`page-${block.id}-heading`}>Heading</label><input id={`page-${block.id}-heading`} value={String(block.data.heading ?? "")} onChange={(event) => onChange("heading", event.target.value)} /></div><div className="rich-text-toolbar" aria-label="Rich text formatting"><div className="rich-text-mode-switch" role="tablist" aria-label="Editor mode"><button type="button" className={`button button-small ${mode === "visual" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "visual"} onClick={() => setMode("visual")}>Visual</button><button type="button" className={`button button-small ${mode === "code" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "code"} onClick={() => setMode("code")}>Code</button></div><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("bold") : replaceSelection("<strong>", "</strong>")}><strong>B</strong></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("italic") : replaceSelection("<em>", "</em>")}><em>I</em></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("underline") : replaceSelection("<u>", "</u>")}><u>U</u></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("strikeThrough") : replaceSelection("<s>", "</s>")}>S</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("insertUnorderedList") : replaceSelection("<ul><li>", "</li></ul>")}>• List</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("insertOrderedList") : replaceSelection("<ol><li>", "</li></ol>")}>1. List</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("formatBlock", "blockquote") : replaceSelection("<blockquote>", "</blockquote>")}>Quote</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("removeFormat") : replaceSelection("", "")}>Clear</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("undo") : replaceSelection("", "")}>Undo</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("redo") : replaceSelection("", "")}>Redo</button><label className="rich-text-tool"><span>Color</span><input type="color" value={String(block.data.textColor || "#52615e")} onChange={(event) => { const color = event.target.value; onChange("textColor", color); mode === "visual" ? runVisualCommand("foreColor", color) : replaceSelection(`<span style="color:${color}">`, "</span>"); }} /></label><label className="rich-text-tool"><span>Size</span><select value={String(block.data.fontSize || "medium")} onChange={(event) => { const size = event.target.value; onChange("fontSize", size); const sizes: Record<string, string> = { small: "0.9rem", medium: "1rem", large: "1.2rem", xlarge: "1.5rem" }; mode === "visual" ? runVisualCommand("fontSize", size === "small" ? "2" : size === "large" ? "5" : size === "xlarge" ? "6" : "3") : replaceSelection(`<span style="font-size:${sizes[size] ?? sizes.medium}">`, "</span>"); }}><option value="small">Small</option><option value="medium">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><label className="rich-text-tool"><span>Align</span><select value={String(block.data.textAlign || "left")} onChange={(event) => { const align = event.target.value; onChange("textAlign", align); if (mode === "visual") runVisualCommand(align === "center" ? "justifyCenter" : align === "right" ? "justifyRight" : align === "justify" ? "justifyFull" : "justifyLeft"); }}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justified</option></select></label></div>{mode === "visual" ? <div ref={visualRef} id={`page-${block.id}-body-visual`} className="rich-text-editor rich-text-editor-visual" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" onInput={syncVisual} /> : <textarea ref={textareaRef} id={`page-${block.id}-body`} value={body} onChange={(event) => onChange("body", event.target.value)} placeholder="Write plain text or safe HTML source." />}{mode === "visual" ? <small>Visual mode edits the formatted content directly. Switch to Code to inspect or refine the sanitized HTML source.</small> : <small>Code mode accepts safe HTML. Formatting is sanitized on save; scripts, forms, unsafe URLs, and unapproved embeds are removed.</small>}<div className="rich-text-image-tools"><div className="field"><label htmlFor={`page-${block.id}-image-url`}>Insert image URL</label><input id={`page-${block.id}-image-url`} type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://images.example.com/photo.jpg" /></div><div className="field"><label htmlFor={`page-${block.id}-image-alt`}>Image alt text</label><input id={`page-${block.id}-image-alt`} value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Describe the image" /></div><button type="button" className="button button-secondary button-small" onClick={addImage}>Insert image</button></div></div>;
 }
 
 function BlockFields({ block, navigationMenus, forms, locations, onChange, onLayoutChange, onPreset }: { block: PageBlock; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; locations: ManagedServiceLocation[]; onChange: (key: string, value: string | number) => void; onLayoutChange: (layout: PageBlockLayout) => void; onPreset: (preset: typeof containerPresets[number]) => void }) {
   const field = (key: string, label: string, multiline = false) => <div className="field" key={key}><label htmlFor={`page-${block.id}-${key}`}>{label}</label>{multiline ? <textarea id={`page-${block.id}-${key}`} value={String(block.data[key] ?? "")} onChange={(event) => onChange(key, event.target.value)} /> : <input id={`page-${block.id}-${key}`} value={String(block.data[key] ?? "")} onChange={(event) => onChange(key, event.target.value)} />}</div>;
+  const mediaField = (key: string, label: string, pickerLabel = "Choose from Media Library") => <div className="field media-field" key={key}><label htmlFor={`page-${block.id}-${key}`}>{label}</label><div className="media-field-controls"><input id={`page-${block.id}-${key}`} type="url" value={String(block.data[key] ?? "")} onChange={(event) => onChange(key, event.target.value)} /><MediaPicker value={String(block.data[key] ?? "")} onChange={(value) => onChange(key, value)} label={pickerLabel} /></div></div>;
   if (block.type === "container") return <ContainerFields block={block} onChange={onLayoutChange} onPreset={onPreset} />;
   if (block.type === "hero") return <div className="page-builder-fields">{field("eyebrow", "Eyebrow")}{field("heading", "Heading")}{field("body", "Body copy", true)}<div className="form-row">{field("ctaLabel", "Button label")}{field("ctaHref", "Button link")}</div></div>;
-  if (block.type === "heading") return <div className="page-builder-fields">{field("text", "Heading text")}<div className="form-row"><label className="field"><span>HTML tag</span><select value={String(block.data.tag ?? "h2")} onChange={(event) => onChange("tag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><label className="field"><span>Alignment</span><select value={String(block.data.alignment ?? "left")} onChange={(event) => onChange("alignment", event.target.value)}><option value="left">Start</option><option value="center">Center</option><option value="right">End</option><option value="justify">Justified</option></select></label></div><div className="form-row">{field("link", "Link URL")}<label className="field"><span>Link target</span><select value={String(block.data.linkTarget ?? "same")} onChange={(event) => onChange("linkTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label></div><label className="form-choice"><input type="checkbox" checked={String(block.data.linkNofollow ?? "no") === "yes"} onChange={(event) => onChange("linkNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow to the heading link</span></label></div>;
+  if (block.type === "heading") return <div className="page-builder-fields">{field("text", "Heading text")}<div className="form-row"><label className="field"><span>HTML tag</span><select value={String(block.data.tag ?? "h2")} onChange={(event) => onChange("tag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><label className="field"><span>Alignment</span><select value={String(block.data.alignment ?? "left")} onChange={(event) => onChange("alignment", event.target.value)}><option value="left">Start</option><option value="center">Center</option><option value="right">End</option><option value="justify">Justified</option></select></label></div><div className="form-row">{field("link", "Link URL")}<label className="field"><span>Link target</span><select value={String(block.data.linkTarget ?? "same")} onChange={(event) => onChange("linkTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label></div><label className="form-choice"><input type="checkbox" checked={String(block.data.linkNofollow ?? "no") === "yes"} onChange={(event) => onChange("linkNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow to the heading link</span></label>{field("linkAttributes", "Custom link attributes", true)}<small>One per line using <code>aria-label|Read more</code> or <code>data-track=heading</code>. Unsafe event, style, href, target, and rel attributes are ignored.</small></div>;
   if (block.type === "rich_text") return <RichTextFields block={block} onChange={onChange} />;
-  if (block.type === "image") return <div className="page-builder-fields">{field("src", "Image URL")}{field("alt", "Alt text")}{field("caption", "Caption")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label><label className="field"><span>Image link</span><select value={String(block.data.imageLinkMode ?? "none")} onChange={(event) => onChange("imageLinkMode", event.target.value)}><option value="none">None</option><option value="media">Media file</option><option value="custom">Custom URL</option></select></label></div>{String(block.data.imageLinkMode ?? "none") === "custom" ? field("imageLink", "Custom image link") : null}<small>Resolution is retained as media metadata; remote images use the source URL until a native media pipeline is connected.</small></div>;
-  if (block.type === "image_box") return <div className="page-builder-fields">{field("src", "Image URL")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label>{field("imageLink", "Link")}</div>{field("title", "Title")}{field("description", "Description", true)}<label className="field"><span>Title HTML tag</span><select value={String(block.data.titleTag ?? "h3")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><small>The shared Style and Advanced controls below apply to the whole Image Box.</small></div>;
-  if (block.type === "icon_box") return <div className="page-builder-fields"><div className="form-row"><label className="field"><span>Icon source</span><select value={String(block.data.iconSource ?? "fontawesome-solid")} onChange={(event) => onChange("iconSource", event.target.value)}>{iconSources.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label><label className="field"><span>View</span><select value={String(block.data.iconView ?? "framed")} onChange={(event) => onChange("iconView", event.target.value)}><option value="default">Default</option><option value="stacked">Stacked</option><option value="framed">Framed</option></select></label></div><label className="field"><span>Icon library</span><select value={String(block.data.iconName ?? "shield")} onChange={(event) => onChange("iconName", event.target.value)}>{iconNames.map((icon) => <option key={icon.value} value={icon.value}>{icon.label}</option>)}</select></label>{field("iconUrl", "Custom SVG or icon asset URL")} {field("title", "Title")}{field("description", "Description", true)}{field("link", "Link")}<label className="field"><span>Title HTML tag</span><select value={String(block.data.titleTag ?? "h3")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><small>Font Awesome source groups are represented by an allow-listed native icon catalog. Use a validated asset URL for a custom SVG; raw SVG markup is never rendered.</small></div>;
-  if (block.type === "video") return <div className="page-builder-fields"><label className="field"><span>Video source</span><select value={String(block.data.source ?? "youtube")} onChange={(event) => onChange("source", event.target.value)}><option value="youtube">YouTube</option><option value="vimeo">Vimeo</option><option value="file">Hosted video file</option></select></label>{field("url", "Video URL")}<div className="form-row">{field("start", "Start time (seconds)")}{field("end", "End time (seconds)")}</div><div className="form-row">{(["autoplay", "mute", "loop", "controls"] as const).map((key) => <label className="field" key={key}><span>{key[0].toUpperCase() + key.slice(1)}</span><select value={String(block.data[key] ?? (key === "controls" ? "yes" : "no"))} onChange={(event) => onChange(key, event.target.value)}><option value="no">No</option><option value="yes">Yes</option></select></label>)}</div><div className="form-row"><label className="field"><span>Captions</span><select value={String(block.data.captions ?? "no")} onChange={(event) => onChange("captions", event.target.value)}><option value="no">Off</option><option value="yes">On</option></select></label><label className="field"><span>Privacy mode</span><select value={String(block.data.privacy ?? "yes")} onChange={(event) => onChange("privacy", event.target.value)}><option value="yes">Privacy enhanced</option><option value="no">Standard</option></select></label></div><label className="field"><span>Fallback image URL</span><input type="url" value={String(block.data.overlayImage ?? "")} onChange={(event) => onChange("overlayImage", event.target.value)} placeholder="https://images.example.com/video-cover.jpg" /></label><label className="field"><span>Fallback image alt text</span><input value={String(block.data.overlayAlt ?? "Video preview")} onChange={(event) => onChange("overlayAlt", event.target.value)} /></label><small>Only recognized YouTube, Vimeo, and HTTPS video URLs are rendered. The same widget can later expose the shared Style and Advanced panels.</small></div>;
+  if (block.type === "image") return <div className="page-builder-fields">{mediaField("src", "Image URL", "Choose image")}{field("alt", "Alt text")}{field("caption", "Caption")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label><label className="field"><span>Image link</span><select value={String(block.data.imageLinkMode ?? "none")} onChange={(event) => onChange("imageLinkMode", event.target.value)}><option value="none">None</option><option value="media">Media file</option><option value="custom">Custom URL</option></select></label></div>{String(block.data.imageLinkMode ?? "none") === "custom" ? field("imageLink", "Custom image link") : null}<small>Choose a reusable asset or enter a direct HTTPS image URL. Resolution is retained as media metadata.</small></div>;
+  if (block.type === "image_box") return <div className="page-builder-fields">{mediaField("src", "Image URL", "Choose image")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label>{field("imageLink", "Link")}</div>{field("title", "Title")}{field("description", "Description", true)}<label className="field"><span>Title HTML tag</span><select value={String(block.data.titleTag ?? "h3")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><small>The shared Style and Advanced controls below apply to the whole Image Box.</small></div>;
+  if (block.type === "icon") return <div className="page-builder-fields"><div className="form-row"><label className="field"><span>Icon source</span><select value={String(block.data.iconSource ?? "fontawesome-solid")} onChange={(event) => onChange("iconSource", event.target.value)}>{iconSources.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label><label className="field"><span>View</span><select value={String(block.data.iconView ?? "default")} onChange={(event) => onChange("iconView", event.target.value)}><option value="default">Default</option><option value="stacked">Stacked</option><option value="framed">Framed</option></select></label></div><label className="field"><span>Icon library</span><select value={String(block.data.iconName ?? "sparkles")} onChange={(event) => onChange("iconName", event.target.value)}>{iconNames.map((icon) => <option key={icon.value} value={icon.value}>{icon.label}</option>)}</select></label><div className="form-row"><div>{field("iconUrl", "Custom SVG or icon asset URL")}</div><div className="field"><span>Reusable icon asset</span><MediaPicker value={String(block.data.iconUrl ?? "")} onChange={(value) => onChange("iconUrl", value)} label="Choose image or SVG" /></div></div><div className="form-row">{field("link", "Link URL")}<label className="field"><span>Link target</span><select value={String(block.data.linkTarget ?? "same")} onChange={(event) => onChange("linkTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label></div><label className="form-choice"><input type="checkbox" checked={String(block.data.linkNofollow ?? "no") === "yes"} onChange={(event) => onChange("linkNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow</span></label><small>Use Font Awesome Regular, Solid, or Brands icons, or choose an SVG from the Media Library. Style controls below set alignment, color, size, and rotation.</small></div>;
+  if (block.type === "icon_box") return <div className="page-builder-fields"><div className="form-row"><label className="field"><span>Icon source</span><select value={String(block.data.iconSource ?? "fontawesome-solid")} onChange={(event) => onChange("iconSource", event.target.value)}>{iconSources.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label><label className="field"><span>View</span><select value={String(block.data.iconView ?? "framed")} onChange={(event) => onChange("iconView", event.target.value)}><option value="default">Default</option><option value="stacked">Stacked</option><option value="framed">Framed</option></select></label></div><label className="field"><span>Icon library</span><select value={String(block.data.iconName ?? "shield")} onChange={(event) => onChange("iconName", event.target.value)}>{iconNames.map((icon) => <option key={icon.value} value={icon.value}>{icon.label}</option>)}</select></label><div className="form-row"><div>{field("iconUrl", "Custom SVG or icon asset URL")}</div><div className="field"><span>Reusable icon asset</span><MediaPicker value={String(block.data.iconUrl ?? "")} onChange={(value) => onChange("iconUrl", value)} label="Choose image or SVG" /></div></div>{field("title", "Title")}{field("description", "Description", true)}{field("link", "Link")}<label className="field"><span>Title HTML tag</span><select value={String(block.data.titleTag ?? "h3")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><small>Font Awesome source groups use the shared Regular, Solid, and Brands catalog. Upload or choose an SVG from the Media Library for a custom icon; raw SVG markup is never rendered.</small></div>;
+  if (block.type === "video") return <div className="page-builder-fields"><label className="field"><span>Video source</span><select value={String(block.data.source ?? "youtube")} onChange={(event) => onChange("source", event.target.value)}><option value="youtube">YouTube</option><option value="vimeo">Vimeo</option><option value="file">Hosted video file</option></select></label>{field("url", "Video URL")}<div className="form-row">{field("start", "Start time (seconds)")}{field("end", "End time (seconds)")}</div><div className="form-row">{(["autoplay", "mute", "loop", "controls"] as const).map((key) => <label className="field" key={key}><span>{key[0].toUpperCase() + key.slice(1)}</span><select value={String(block.data[key] ?? (key === "controls" ? "yes" : "no"))} onChange={(event) => onChange(key, event.target.value)}><option value="no">No</option><option value="yes">Yes</option></select></label>)}</div><div className="form-row"><label className="field"><span>Captions</span><select value={String(block.data.captions ?? "no")} onChange={(event) => onChange("captions", event.target.value)}><option value="no">Off</option><option value="yes">On</option></select></label>{String(block.data.captions ?? "no") === "yes" ? field("captionsUrl", "Caption track URL") : null}</div><div className="form-row"><label className="field"><span>Suggested videos</span><select value={String(block.data.suggestedVideos ?? "no")} onChange={(event) => onChange("suggestedVideos", event.target.value)}><option value="no">Off</option><option value="yes">On</option></select></label><label className="field"><span>Privacy mode</span><select value={String(block.data.privacy ?? "yes")} onChange={(event) => onChange("privacy", event.target.value)}><option value="yes">Privacy enhanced</option><option value="no">Standard</option></select></label></div><details className="page-builder-advanced-section" open><summary>Image overlay</summary><div className="form-row"><label className="field"><span>Overlay</span><select value={String(block.data.overlay ?? "hide")} onChange={(event) => onChange("overlay", event.target.value)}><option value="hide">Hide</option><option value="show">Show before playback</option></select></label><label className="field"><span>Play icon</span><select value={String(block.data.overlayPlayIcon ?? "yes")} onChange={(event) => onChange("overlayPlayIcon", event.target.value)}><option value="yes">Show</option><option value="no">Hide</option></select></label></div><div className="form-row"><label className="field"><span>Lightbox</span><select value={String(block.data.overlayLightbox ?? "no")} onChange={(event) => onChange("overlayLightbox", event.target.value)}><option value="no">Off</option><option value="yes">On</option></select></label>{mediaField("overlayImage", "Overlay / fallback image URL", "Choose fallback image")}</div><label className="field"><span>Overlay image alt text</span><input value={String(block.data.overlayAlt ?? "Video preview")} onChange={(event) => onChange("overlayAlt", event.target.value)} /></label></details><small>Only recognized YouTube, Vimeo, and HTTPS video URLs are rendered. Captions can use YouTube captions or an HTTPS WebVTT track, and suggested videos controls related-video behavior. The overlay can hold playback until the visitor activates the video, with an optional lightbox.</small></div>;
   if (block.type === "map") {
     const locationMode = String(block.data.locationMode ?? "address") === "coordinates" ? "coordinates" : "address";
-    return <div className="page-builder-fields"><label className="field"><span>Location input</span><select value={locationMode} onChange={(event) => onChange("locationMode", event.target.value)}><option value="address">Street address or place</option><option value="coordinates">Latitude and longitude</option></select></label>{locationMode === "coordinates" ? <div className="form-row"><label className="field"><span>Latitude</span><input type="number" min="-90" max="90" step="any" value={String(block.data.latitude ?? "")} onChange={(event) => onChange("latitude", event.target.value)} placeholder="32.7357" /></label><label className="field"><span>Longitude</span><input type="number" min="-180" max="180" step="any" value={String(block.data.longitude ?? "")} onChange={(event) => onChange("longitude", event.target.value)} placeholder="-97.1081" /></label></div> : <label className="field"><span>Street address or place</span><input value={String(block.data.address ?? block.data.location ?? "")} onChange={(event) => onChange("address", event.target.value)} placeholder="123 Main Street, Arlington, TX 76014" /></label>}<div className="form-row">{field("zoom", "Zoom")}{field("height", "Height (pixels)")}</div><small>Use a full street address with ZIP code, a place name, or switch to coordinates and enter latitude from -90 to 90 and longitude from -180 to 180. The published map uses a safe Google Maps embed URL and opens the full map in a separate tab.</small></div>;
+    return <div className="page-builder-fields"><label className="field"><span>Location input</span><select value={locationMode} onChange={(event) => onChange("locationMode", event.target.value)}><option value="address">Street address or place</option><option value="coordinates">Latitude and longitude</option></select></label>{locationMode === "coordinates" ? <div className="form-row"><label className="field"><span>Latitude</span><input type="number" min="-90" max="90" step="any" value={String(block.data.latitude ?? "")} onChange={(event) => onChange("latitude", event.target.value)} placeholder="32.7357" /></label><label className="field"><span>Longitude</span><input type="number" min="-180" max="180" step="any" value={String(block.data.longitude ?? "")} onChange={(event) => onChange("longitude", event.target.value)} placeholder="-97.1081" /></label></div> : <label className="field"><span>Street address or place</span><input value={String(block.data.address ?? block.data.location ?? "")} onChange={(event) => onChange("address", event.target.value)} placeholder="123 Main Street, Arlington, TX 76014" /></label>}<div className="form-row">{field("zoom", "Zoom")}{field("height", "Height (pixels)")}</div><label className="field"><span>Google place card</span><select value={String(block.data.showPlaceCard ?? "no")} onChange={(event) => onChange("showPlaceCard", event.target.value)}><option value="no">Off</option><option value="yes">On — requires Google Places API key</option></select></label>{String(block.data.showPlaceCard ?? "no") === "yes" ? field("placeQuery", "Places search override") : null}<small>Use a full street address with ZIP code, a place name, or switch to coordinates and enter latitude from -90 to 90 and longitude from -180 to 180. The published map uses a safe Google Maps embed URL and opens the full map in a separate tab. The optional card uses the server-side GOOGLE_PLACES_API_KEY and never exposes that key to the browser.</small></div>;
   }
   if (block.type === "location_index") return <div className="page-builder-fields">{field("heading", "Section heading")}<small>This block keeps the synthetic service-area directory connected to the page while the surrounding hero, copy, CTA, and block styling remain editable.</small></div>;
   if (block.type === "location_detail") return <div className="page-builder-fields"><div className="field"><label htmlFor={`page-${block.id}-locationSlug`}>Managed service location</label><select id={`page-${block.id}-locationSlug`} value={String(block.data.locationSlug ?? "")} onChange={(event) => onChange("locationSlug", event.target.value)}><option value="">Choose a service location</option>{locations.map((location) => <option key={location.id} value={location.slug}>{location.city}, {location.region} · {location.pageStatus}</option>)}</select></div><small>This reusable template renders the selected location’s details, formats, FAQs, and related coverage links. Manage the location record separately; use this block to control where the template appears.</small></div>;
   if (block.type === "button") return <div className="page-builder-fields">{field("buttonLabel", "Button text")}{field("buttonHref", "Button link")}<div className="form-row"><label className="field"><span>Button type</span><select value={String(block.data.buttonType ?? "default")} onChange={(event) => onChange("buttonType", event.target.value)}><option value="default">Default</option><option value="info">Info</option><option value="success">Success</option><option value="warning">Warning</option><option value="danger">Danger</option></select></label>{field("buttonId", "Button ID")}</div><div className="form-row">{field("buttonIcon", "Optional icon")}<label className="field"><span>Icon position</span><select value={String(block.data.buttonIconPosition ?? "left")} onChange={(event) => onChange("buttonIconPosition", event.target.value)}><option value="left">Left</option><option value="right">Right</option></select></label></div><small>Use a short text symbol or emoji for the optional icon. Button links are limited to safe internal or HTTPS destinations when published.</small></div>;
-  if (block.type === "cta") return <div className="page-builder-fields">{field("heading", "Heading")}{field("body", "Body copy", true)}<div className="form-row">{field("buttonLabel", "Button label")}{field("buttonHref", "Button link")}</div></div>;
+  if (block.type === "cta") return <div className="page-builder-fields"><div className="form-row"><label className="field"><span>Graphic element</span><select value={String(block.data.graphicType ?? "none")} onChange={(event) => onChange("graphicType", event.target.value)}><option value="none">None</option><option value="image">Image</option><option value="icon">Icon</option></select></label>{String(block.data.graphicType ?? "none") === "icon" ? <label className="field"><span>Icon</span><select value={String(block.data.graphicIcon ?? "sparkles")} onChange={(event) => onChange("graphicIcon", event.target.value)}>{iconNames.map((icon) => <option key={icon.value} value={icon.value}>{icon.label}</option>)}</select></label> : null}</div>{String(block.data.graphicType ?? "none") === "image" ? <div className="form-row"><div>{field("graphicImage", "Graphic image URL")}</div><div className="field"><span>Choose image</span><MediaPicker value={String(block.data.graphicImage ?? "")} onChange={(value) => onChange("graphicImage", value)} label="Choose image" /></div></div> : null}<div className="form-row">{field("heading", "Heading")}<label className="field"><span>Heading tag</span><select value={String(block.data.titleTag ?? "h2")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label></div><div className="form-row">{field("body", "Body copy", true)}<label className="field"><span>Description tag</span><select value={String(block.data.descriptionTag ?? "p")} onChange={(event) => onChange("descriptionTag", event.target.value)}>{["p", "div", "span"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label></div><div className="form-row">{field("buttonLabel", "Button label")}{field("buttonHref", "Button link")}</div><div className="form-row"><label className="field"><span>Button target</span><select value={String(block.data.buttonTarget ?? "same")} onChange={(event) => onChange("buttonTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label><label className="form-choice"><input type="checkbox" checked={String(block.data.buttonNofollow ?? "no") === "yes"} onChange={(event) => onChange("buttonNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow</span></label></div>{field("ribbonText", "Ribbon text")}<small>CTA content starts with editable placeholder copy and supports an optional image, Font Awesome icon, semantic tags, link options, and ribbon text.</small></div>;
   if (block.type === "product_grid" || block.type === "product_category" || block.type === "sale_grid") return <div className="page-builder-fields">{field("heading", "Heading")}{block.type !== "sale_grid" ? field("category", block.type === "product_category" ? "Category name" : "Optional category filter") : null}<div className="form-row">{field("columns", "Columns")}{field("itemsPerPage", "Products per page")}</div><div className="form-row"><label className="field"><span>Pagination</span><select value={String(block.data.pagination ?? "numbers")} onChange={(event) => onChange("pagination", event.target.value)}><option value="numbers">Previous and next</option><option value="none">No pagination</option></select></label><label className="field"><span>Sort products</span><select value={String(block.data.sort ?? "name-asc")} onChange={(event) => onChange("sort", event.target.value)}><option value="name-asc">Name, A to Z</option><option value="name-desc">Name, Z to A</option><option value="price-asc">Price, low to high</option><option value="price-desc">Price, high to low</option></select></label></div><details className="page-builder-advanced-section" open><summary>Card content</summary><div className="page-style-grid">{(["showImage", "showSku", "showDescription", "showPrice", "showInventory", "showButton"] as const).map((key) => <label className="form-choice" key={key}><input type="checkbox" checked={String(block.data[key] ?? "yes") !== "no"} onChange={(event) => onChange(key, event.target.checked ? "yes" : "no")} /><span>{key === "showImage" ? "Image" : key === "showSku" ? "Category and SKU" : key === "showDescription" ? "Description" : key === "showPrice" ? "Price" : key === "showInventory" ? "Availability" : "View product button"}</span></label>)}</div><div className="form-row">{field("buttonLabel", "Button label")}<label className="field"><span>Card style</span><select value={String(block.data.cardStyle ?? "card")} onChange={(event) => onChange("cardStyle", event.target.value)}><option value="card">Card</option><option value="minimal">Minimal</option></select></label></div></details><small>Columns are responsive in the published grid. Pagination uses the public Products route and keeps the selected category in the URL.</small></div>;
   if (block.type === "gallery") return <div className="page-builder-fields">{field("heading", "Heading")}{field("images", "Images", true)}<small>One image per line. Use the format: image URL | alt text | caption</small></div>;
   if (block.type === "testimonial_grid") return <div className="page-builder-fields">{field("heading", "Heading")}{field("maxItems", "Maximum testimonials")}</div>;
@@ -408,17 +531,62 @@ function BlockFields({ block, navigationMenus, forms, locations, onChange, onLay
   return <div className="page-builder-fields">{field("height", "Height (pixels)")}</div>;
 }
 
-function PageBlockAdvancedFields({ block, onChange }: { block: PageBlock; onChange: (key: string, value: string | number) => void }) {
+function PageBlockAdvancedFields({ block, onChange, onStyleChange }: { block: PageBlock; onChange: (key: string, value: string | number) => void; onStyleChange: (style: PageBlockStyle | undefined) => void }) {
+  const style = block.style ?? {};
+  const [device, setDevice] = useState<PageStyleDevice>("desktop");
+  const [linkedEdges, setLinkedEdges] = useState<Record<"margin" | "padding", boolean>>({ margin: false, padding: false });
+  const edgeNames: Array<{ key: keyof PageStyleEdges; label: string }> = [{ key: "top", label: "Top" }, { key: "right", label: "Right" }, { key: "bottom", label: "Bottom" }, { key: "left", label: "Left" }];
+  function edgeValue(group: "margin" | "padding", edge: keyof PageStyleEdges): string {
+    const values = style[group] as PageStyleBox | undefined;
+    const deviceEdges = values?.[device] as PageStyleEdges | undefined;
+    const desktopEdges = values?.desktop as PageStyleEdges | undefined;
+    const value = deviceEdges?.[edge] ?? desktopEdges?.[edge];
+    return value === undefined ? "" : String(value);
+  }
+  function setEdge(group: "margin" | "padding", edge: keyof PageStyleEdges, raw: string) {
+    const value = raw === "" ? undefined : Number(raw);
+    const current = { ...((style[group] as PageStyleBox | undefined) ?? {}) } as Record<string, PageStyleEdges>;
+    const nextEdges = { ...(current[device] ?? {}) };
+    const nextValue = value === undefined || !Number.isFinite(value) ? undefined : Math.min(group === "margin" ? 500 : 500, Math.max(group === "margin" ? -500 : 0, value));
+    if (linkedEdges[group]) {
+      for (const item of edgeNames) {
+        if (nextValue === undefined) delete nextEdges[item.key]; else nextEdges[item.key] = nextValue;
+      }
+    } else if (nextValue === undefined) delete nextEdges[edge]; else nextEdges[edge] = nextValue;
+    if (Object.keys(nextEdges).length > 0) current[device] = nextEdges; else delete current[device];
+    onStyleChange({ ...style, [group]: Object.keys(current).length > 0 ? current : undefined });
+  }
+  function toggleEdges(group: "margin" | "padding") {
+    const next = !linkedEdges[group];
+    setLinkedEdges((current) => ({ ...current, [group]: next }));
+    if (!next) return;
+    const current = { ...((style[group] as PageStyleBox | undefined) ?? {}) } as Record<string, PageStyleEdges>;
+    current[device] = { top: 0, right: 0, bottom: 0, left: 0 };
+    onStyleChange({ ...style, [group]: current });
+  }
   const visibility = String(block.data.visibility ?? "all");
+  const responsiveDevices = [
+    ["widescreen", "Widescreen"], ["desktop", "Desktop"], ["laptop", "Laptop"],
+    ["tabletLandscape", "Tablet landscape"], ["tabletPortrait", "Tablet portrait"],
+    ["mobileLandscape", "Mobile landscape"], ["mobilePortrait", "Mobile portrait"],
+  ] as const;
+  const hiddenDevices = new Set(String(block.data.hiddenDevices ?? "").split(",").map((value) => value.trim()).filter(Boolean));
+  function toggleResponsiveDevice(device: string, checked: boolean) {
+    const next = new Set(hiddenDevices);
+    if (checked) next.add(device); else next.delete(device);
+    onChange("hiddenDevices", Array.from(next).join(","));
+  }
   return <div className="page-builder-fields page-builder-advanced-fields">
     <div className="page-container-heading"><div><strong>Advanced settings</strong><small>Optional anchors and responsive visibility for this block.</small></div><span className="page-container-badge">Optional</span></div>
+    <details className="page-builder-advanced-section" open><summary>Layout spacing</summary><div className="page-style-device-tabs" role="tablist" aria-label="Responsive spacing device"><span>Device</span>{PAGE_STYLE_DEVICES.map(({ key, label }) => <button type="button" key={key} className={device === key ? "is-active" : ""} onClick={() => setDevice(key)} role="tab" aria-selected={device === key}>{label}</button>)}</div>{(["margin", "padding"] as const).map((group) => <div className="page-style-edges" key={group}><div className="page-style-subheading"><strong>{group === "margin" ? "Margin" : "Padding"}</strong><span>{device === "desktop" ? "Desktop values" : "Device override"}<button type="button" className={`page-style-link-toggle ${linkedEdges[group] ? "is-active" : ""}`} aria-pressed={linkedEdges[group]} aria-label={`${linkedEdges[group] ? "Unlink" : "Link"} ${group} values`} title={`${linkedEdges[group] ? "Unlink" : "Link"} values`} onClick={() => toggleEdges(group)}>⛓</button></span></div><div className="page-style-edge-grid">{edgeNames.map(({ key, label }) => <label className="page-style-number" key={key}><span>{label}</span><span className="page-style-number-input"><input type="number" value={edgeValue(group, key)} min={group === "margin" ? -500 : 0} max={500} onChange={(event) => setEdge(group, key, event.target.value)} /><small>px</small></span></label>)}</div></div>)}</details>
     <div className="page-style-grid">
       <label className="field"><span>CSS ID</span><input id={`page-${block.id}-cssId`} value={String(block.data.cssId ?? "")} onChange={(event) => onChange("cssId", event.target.value)} placeholder="section-name" /></label>
       <label className="field"><span>Hide on</span><select id={`page-${block.id}-visibility`} value={visibility} onChange={(event) => onChange("visibility", event.target.value)}><option value="all">All devices</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></label>
     </div>
+    <details className="page-builder-advanced-section" open><summary>Responsive visibility</summary><p className="field-help">Hide this block on the exact device class without changing the content on other breakpoints.</p><div className="page-style-grid">{responsiveDevices.map(([device, label]) => <label className="form-choice" key={device}><input type="checkbox" checked={hiddenDevices.has(device)} onChange={(event) => toggleResponsiveDevice(device, event.target.checked)} /><span>{label}</span></label>)}</div></details>
     <details className="page-builder-advanced-section"><summary>Attributes</summary><div className="page-style-grid"><label className="field"><span>ARIA label</span><input value={String(block.data.ariaLabel ?? "")} onChange={(event) => onChange("ariaLabel", event.target.value)} placeholder="Describe this section" /></label><label className="field"><span>Role</span><select value={String(block.data.role ?? "")} onChange={(event) => onChange("role", event.target.value)}><option value="">No role</option><option value="region">Region</option><option value="article">Article</option><option value="section">Section</option><option value="navigation">Navigation</option><option value="complementary">Complementary</option><option value="main">Main</option></select></label></div><label className="field"><span>Title attribute</span><input value={String(block.data.titleAttribute ?? "")} onChange={(event) => onChange("titleAttribute", event.target.value)} placeholder="Optional hover description" /></label></details>
     <details className="page-builder-advanced-section"><summary>Custom CSS</summary><label className="field"><span>Scoped CSS</span><textarea value={String(block.data.customCss ?? "")} onChange={(event) => onChange("customCss", event.target.value)} placeholder="color: #183b36;\nbackground: #f3faf7;" /></label><small>Simple selectors are scoped to this block in the live preview and published page. Unsafe imports and script-like expressions are removed.</small></details>
-    <small>Use a CSS ID for an in-page anchor. The visibility choice hides this block at the selected device size in the published page and live preview.</small>
+    <small>Use a CSS ID for an in-page anchor. The legacy Hide on field remains available for existing pages; Responsive visibility adds the full device matrix.</small>
   </div>;
 }
 
@@ -462,14 +630,16 @@ function BlockEditor({ block, path, count, navigationMenus, forms, locations, dr
   </article>;
 }
 
-export function PageBuilder({ page, navigationMenus = [], forms = [], locations = [] }: { page?: ContentPage; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; locations?: ManagedServiceLocation[] }) {
+export function PageBuilder({ page, template, headerTemplate, footerTemplate, navigationMenus = [], forms = [], locations = [] }: { page?: ContentPage; template?: SiteTemplate; headerTemplate?: SiteTemplate | null; footerTemplate?: SiteTemplate | null; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; locations?: ManagedServiceLocation[] }) {
   const router = useRouter();
   const previewCanvasRef = useRef<HTMLDivElement>(null);
-  const [title, setTitle] = useState(() => page?.title ?? "");
+  const isTemplate = Boolean(template);
+  const [title, setTitle] = useState(() => page?.title ?? template?.name ?? "");
   const [slug, setSlug] = useState(() => page?.slug ?? "");
   const [excerpt, setExcerpt] = useState(() => page?.excerpt ?? "");
-  const [status, setStatus] = useState<PageStatus>(() => page?.status ?? "draft");
+  const [status, setStatus] = useState<PageStatus>(() => page?.status ?? template?.status ?? "draft");
   const [isHomepage, setIsHomepage] = useState(() => page?.isHomepage ?? false);
+  const [isActive, setIsActive] = useState(() => template?.isActive ?? false);
   const [seoTitle, setSeoTitle] = useState(() => page?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(() => page?.seoDescription ?? "");
   const [blocks, setBlocks] = useState<PageBlock[]>(() => page?.blocks ?? []);
@@ -485,12 +655,22 @@ export function PageBuilder({ page, navigationMenus = [], forms = [], locations 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [focusedContainerId, setFocusedContainerId] = useState<string | null>(null);
 
   const selectedPath = selectedBlockId ? findBlockPath(blocks, selectedBlockId) : null;
   const selectedBlock = selectedPath ? getBlockAtPath(blocks, selectedPath) : undefined;
 
+  function rememberContainerForPath(path: BlockPath | null) {
+    if (!path) return;
+    const block = getBlockAtPath(blocks, path);
+    const containerPath = block?.type === "container" ? path : nearestContainerPath(path);
+    const container = containerPath ? getBlockAtPath(blocks, containerPath) : undefined;
+    if (container?.type === "container") setFocusedContainerId(container.id);
+  }
+
   function selectBlock(blockId: string | null) {
     setSelectedBlockId(blockId);
+    if (blockId) rememberContainerForPath(findBlockPath(blocks, blockId));
     setSelectedPanel("content");
     setPageSettingsOpen(false);
     setSeoOpen(false);
@@ -561,14 +741,19 @@ useLayoutEffect(() => {
 
   function addBlock(item: BlockLibraryItem) {
     const block = newBlockFromLibrary(item);
-    const parentPath = item.category === "basic" ? nearestContainerPath(selectedPath) : null;
+    const selectedContainerPath = item.category === "basic" ? nearestContainerPath(selectedPath) : null;
+    const focusedContainerPath = item.category === "basic" && focusedContainerId ? findBlockPath(blocks, focusedContainerId) : null;
+    const parentPath = selectedContainerPath ?? focusedContainerPath;
+    const autoContainer = item.category === "basic" ? makeAutoContainer(block) : null;
     setBlocks((current) => {
       const parent = parentPath ? getBlockAtPath(current, parentPath) : undefined;
       if (item.category === "basic" && parent?.type === "container") {
         return updateBlockAtPath(current, parentPath as BlockPath, (currentParent) => ({ ...currentParent, children: [...(currentParent.children ?? []), block] }));
       }
-      return item.category === "basic" ? [...current, makeAutoContainer(block)] : [...current, block];
+      return item.category === "basic" && autoContainer ? [...current, autoContainer] : [...current, block];
     });
+    if (item.type === "container") setFocusedContainerId(block.id);
+    else if (item.category === "basic") setFocusedContainerId(parentPath ? getBlockAtPath(blocks, parentPath)?.id ?? autoContainer?.id ?? null : autoContainer?.id ?? null);
     selectBlock(block.id);
     setMessage("");
   }
@@ -576,6 +761,7 @@ useLayoutEffect(() => {
   function addChild(path: BlockPath, item: BlockLibraryItem) {
     const block = newBlockFromLibrary(item);
     setBlocks((current) => updateBlockAtPath(current, path, (parent) => parent.type === "container" ? { ...parent, children: [...(parent.children ?? []), block] } : parent));
+    setFocusedContainerId(getBlockAtPath(blocks, path)?.id ?? null);
     selectBlock(block.id);
     setMessage("");
   }
@@ -629,11 +815,30 @@ useLayoutEffect(() => {
   }
 
   function handlePreviewClick(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target;
+    const templateShell = target instanceof Element ? target.closest<HTMLElement>("[data-page-editor-template-href]") : null;
+    const clickedInteractive = target instanceof Element ? target.closest("a,button") : null;
+    if (templateShell?.dataset.pageEditorTemplateHref && !clickedInteractive) {
+      event.preventDefault();
+      event.stopPropagation();
+      router.push(templateShell.dataset.pageEditorTemplateHref);
+      return;
+    }
+    const focusButton = target instanceof Element ? target.closest<HTMLElement>("[data-page-editor-focus-container]") : null;
+    if (focusButton?.dataset.pageEditorFocusContainer) {
+      event.preventDefault();
+      event.stopPropagation();
+      setFocusedContainerId(focusButton.dataset.pageEditorFocusContainer);
+      selectBlock(null);
+      setMessage("Container focused. Choose a widget to add it here.");
+      return;
+    }
     const frame = previewFrameFromEvent(event);
     const path = previewTargetPath(frame);
     if (!path || !frame?.dataset.pageBlockId) return;
     event.preventDefault();
     event.stopPropagation();
+    rememberContainerForPath(path);
     selectBlock(frame.dataset.pageBlockId);
   }
 
@@ -670,13 +875,16 @@ useLayoutEffect(() => {
       const item = blockLibrary.find((candidate) => candidate.key === libraryKey);
       if (!item) return;
       const block = newBlockFromLibrary(item);
+      const autoContainer = item.category === "basic" ? makeAutoContainer(block) : null;
+      const destinationContainer = containerPath ? getBlockAtPath(blocks, containerPath) : undefined;
+      if (destinationContainer?.type === "container") setFocusedContainerId(destinationContainer.id);
+      else if (autoContainer) setFocusedContainerId(autoContainer.id);
       setBlocks((current) => {
         if (containerPath && getBlockAtPath(current, containerPath)?.type === "container") {
           return updateBlockAtPath(current, containerPath, (parent) => ({ ...parent, children: [...(parent.children ?? []), block] }));
         }
         if (item.category === "basic") {
-          const container = makeAutoContainer(block);
-          return targetPath?.length === 1 ? insertAfterPath(current, targetPath, container) : [...current, container];
+          return targetPath?.length === 1 && autoContainer ? insertAfterPath(current, targetPath, autoContainer) : autoContainer ? [...current, autoContainer] : current;
         }
         return targetPath?.length === 1 ? insertAfterPath(current, targetPath, block) : [...current, block];
       });
@@ -693,12 +901,14 @@ useLayoutEffect(() => {
   async function save() {
     setSaving(true); setError(""); setMessage("");
     try {
-      const response = await fetch(page ? `/api/admin/pages/${encodeURIComponent(page.id)}` : "/api/admin/pages", { method: page ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, slug: slug || slugify(title), excerpt, status, isHomepage, blocks, seoTitle, seoDescription }) });
-      const data = await response.json() as { page?: { id: string; slug: string }; error?: string };
-      if (!response.ok || !data.page) throw new Error(data.error ?? "The page could not be saved.");
-      if (!page) router.push(`/admin/pages/${data.page.id}/edit`);
-      else setMessage("Page saved.");
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "The page could not be saved."); } finally { setSaving(false); }
+      const endpoint = template ? `/api/admin/templates/${encodeURIComponent(template.id)}` : page ? `/api/admin/pages/${encodeURIComponent(page.id)}` : "/api/admin/pages";
+      const payload = template ? { kind: template.kind, name: title, status, isActive: status === "published" && isActive, blocks } : { title, slug: slug || slugify(title), excerpt, status, isHomepage, blocks, seoTitle, seoDescription };
+      const response = await fetch(endpoint, { method: page || template ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await response.json() as { page?: { id: string; slug: string }; template?: { id: string }; error?: string };
+      if (!response.ok || (!data.page && !data.template)) throw new Error(data.error ?? `The ${isTemplate ? "template" : "page"} could not be saved.`);
+      if (!page && !template && data.page) router.push(`/admin/pages/${data.page.id}/edit`);
+      else setMessage(`${isTemplate ? "Template" : "Page"} saved.`);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : `The ${isTemplate ? "template" : "page"} could not be saved.`); } finally { setSaving(false); }
   }
 
   const selectedEditLabel = selectedBlock?.type === "container" ? "Edit container" : selectedBlock ? `Edit ${blockLabel(selectedBlock).toLowerCase()}` : "Edit element";
@@ -707,19 +917,19 @@ useLayoutEffect(() => {
     <div className="page-builder">
       <div className="page-builder-toolbar">
         <div>
-          <span className="eyebrow">Visual page editor</span>
-          <h1 className="page-title">{page ? "Edit page" : "Create a page"}</h1>
-          <p className="page-subtitle">Compose reusable blocks, choose Flexbox or Grid structures, drag nested blocks into place, then publish when the page is ready.</p>
+          <span className="eyebrow">{isTemplate ? "Visual template editor" : "Visual page editor"}</span>
+          <h1 className="page-title">{page ? "Edit page" : template ? `Edit ${template.kind} template` : "Create a page"}</h1>
+          <p className="page-subtitle">{isTemplate ? "Compose a reusable site shell with the same containers, widgets, styles, and live canvas used for public pages." : "Compose reusable blocks, choose Flexbox or Grid structures, drag nested blocks into place, then publish when the page is ready."}</p>
         </div>
         <div className="detail-actions">
-          <Link href="/admin/pages" className="button button-secondary"><ArrowLeft size={14} /> Pages</Link>
+          <Link href={isTemplate ? "/admin/appearance/templates" : "/admin/pages"} className="button button-secondary"><ArrowLeft size={14} /> {isTemplate ? "Templates" : "Pages"}</Link>
           <button type="button" className={preview ? "button button-secondary button-active" : "button button-secondary"} onClick={() => setPreview((current) => !current)} aria-pressed={preview}>{preview ? "Hide preview" : "Show preview"}</button>
-          <button className="button" type="button" onClick={() => void save()} disabled={saving}><Save size={14} />{saving ? "Saving…" : "Save page"}</button>
+          <button className="button" type="button" onClick={() => void save()} disabled={saving}><Save size={14} />{saving ? "Saving…" : `Save ${isTemplate ? "template" : "page"}`}</button>
         </div>
       </div>
       <div className="page-builder-layout">
         <aside className="page-builder-sidebar" aria-label="Page tools and settings">
-          <div className="page-builder-page-name" aria-label="Current page"><h2>{title || "Untitled page"}</h2><span>{slug ? `/${slug}` : "No slug yet"}</span></div>
+          <div className="page-builder-page-name" aria-label={isTemplate ? "Current template" : "Current page"}><h2>{title || (isTemplate ? "Untitled template" : "Untitled page")}</h2><span>{isTemplate ? `${template?.kind} template` : slug ? `/${slug}` : "No slug yet"}</span></div>
           {!selectedBlock ? <section className="panel page-block-library">
             <div className="panel-header">
               <div><span className="eyebrow">Elements</span><h2 className="panel-title">Add content</h2><p className="page-builder-library-help">Start with a container, or drop a widget below a section to create a full-width container automatically.</p></div>
@@ -731,9 +941,11 @@ useLayoutEffect(() => {
           {selectedBlock && selectedPath ? <section className="panel page-builder-selected-inspector" aria-label="Selected element settings">
             <div className="panel-header page-builder-inspector-header"><div><span className="eyebrow">Selected element</span><h2 className="panel-title">{blockLabel(selectedBlock)}</h2><small className="row-meta">Edit the selected item from the live canvas.</small></div><button type="button" className="icon-button" aria-label="Clear selected element" onClick={() => selectBlock(null)}><X size={15} /></button></div>
             <div className="page-builder-selected-view-switcher" role="tablist" aria-label="Selected element controls"><button type="button" role="tab" aria-selected={selectedPanel === "content"} className={selectedPanel === "content" ? "is-active" : ""} onClick={() => setSelectedPanel("content")}>{selectedBlock.type === "container" ? "Layout" : "Content"}</button><button type="button" role="tab" aria-selected={selectedPanel === "style"} className={selectedPanel === "style" ? "is-active" : ""} onClick={() => setSelectedPanel("style")}>Style</button><button type="button" role="tab" aria-selected={selectedPanel === "advanced"} className={selectedPanel === "advanced" ? "is-active" : ""} onClick={() => setSelectedPanel("advanced")}>Advanced</button></div>
-            {selectedPanel === "content" ? <BlockFields block={selectedBlock} navigationMenus={navigationMenus} forms={forms} locations={locations} onChange={(key, value) => updateBlock(selectedPath, key, value)} onLayoutChange={(layout) => updateBlockLayout(selectedPath, layout)} onPreset={(preset) => applyPreset(selectedPath, preset)} /> : selectedPanel === "style" ? <PageBlockStyleFields block={selectedBlock} onChange={(style) => updateBlockStyle(selectedPath, style)} /> : <PageBlockAdvancedFields block={selectedBlock} onChange={(key, value) => updateBlock(selectedPath, key, value)} />}
+            {selectedPanel === "content" ? <BlockFields block={selectedBlock} navigationMenus={navigationMenus} forms={forms} locations={locations} onChange={(key, value) => updateBlock(selectedPath, key, value)} onLayoutChange={(layout) => updateBlockLayout(selectedPath, layout)} onPreset={(preset) => applyPreset(selectedPath, preset)} /> : selectedPanel === "style" ? <PageBlockStyleFields block={selectedBlock} onChange={(style) => updateBlockStyle(selectedPath, style)} /> : <PageBlockAdvancedFields block={selectedBlock} onChange={(key, value) => updateBlock(selectedPath, key, value)} onStyleChange={(style) => updateBlockStyle(selectedPath, style)} />}
           </section> : null}
           {!selectedBlock || selectedPanel === "content" ? <>
+            {template ? <details className="panel page-builder-collapsible-panel" open><summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Template settings</span><strong>{template.kind === "header" ? "Header" : "Footer"} setup</strong></span></summary><div className="page-builder-settings"><div className="field"><label htmlFor="template-name">Template name</label><input id="template-name" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Marketing header" required /></div><div className="field"><label htmlFor="template-status">Publishing state</label><select id="template-status" value={status} onChange={(event) => { const next = event.target.value as PageStatus; setStatus(next); if (next !== "published") setIsActive(false); }}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></div><div className="page-homepage-control"><label className="form-choice" htmlFor="template-active"><input id="template-active" type="checkbox" checked={isActive} disabled={status !== "published"} onChange={(event) => setIsActive(event.target.checked)} /><span><strong>Use this as the active {template.kind}</strong><small>Saving this choice deactivates the other published {template.kind} template.</small></span></label>{isActive ? <span className="page-home-badge">Active on public site</span> : null}</div></div></details> : null}
+            {!template ? <>
             <details className="panel page-builder-collapsible-panel" open={pageSettingsOpen} onToggle={(event) => setPageSettingsOpen(event.currentTarget.open)}>
               <summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Page settings</span><strong>Page setup</strong></span></summary>
               <div className="page-builder-settings">
@@ -748,6 +960,7 @@ useLayoutEffect(() => {
               <summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Search appearance</span><strong>SEO fields</strong></span></summary>
               <div className="form-grid"><div className="field"><label htmlFor="page-seo-title">SEO title</label><input id="page-seo-title" value={seoTitle} onChange={(event) => setSeoTitle(event.target.value)} placeholder={title || "Page title"} /></div><div className="field"><label htmlFor="page-seo-description">SEO description</label><textarea id="page-seo-description" value={seoDescription} onChange={(event) => setSeoDescription(event.target.value)} placeholder={excerpt || "Search description"} /></div></div>
             </details>
+            </> : null}
           </> : null}
         </aside>
         <section className="page-builder-main" aria-label="Page canvas">
@@ -755,7 +968,9 @@ useLayoutEffect(() => {
           {preview ? <div className="page-preview-panel page-builder-live-preview" onClick={handlePreviewClick} onContextMenu={handlePreviewContextMenu} onDragOver={handlePreviewDragOver} onDrop={handlePreviewDrop}>
             <div className="page-preview-label"><span className="eyebrow">Live preview</span><span>{selectedBlock ? `${blockLabel(selectedBlock)} selected` : "Click a section to edit"}</span></div>
             <div className="page-preview-canvas-shell" ref={previewCanvasRef}>
-              {blocks.length > 0 ? <PageRenderer blocks={blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode /> : <div className="page-preview-empty"><LayoutTemplate size={22} /><strong>Start with a layout</strong><span>Drag Container or Grid here, or drop a widget to create a full-width container.</span></div>}
+              {headerTemplate ? <div className="page-preview-template-shell page-preview-template-header" data-page-editor-template-href={isFallbackSiteTemplate(headerTemplate) ? undefined : `/admin/appearance/templates/${headerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global header</span>{isFallbackSiteTemplate(headerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${headerTemplate.id}/edit`} className="panel-link">Edit header</Link>}</div><PageRenderer blocks={headerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode /></div> : null}
+              {blocks.length > 0 ? <div className="page-preview-page-content"><PageRenderer blocks={blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode /></div> : <div className="page-preview-empty"><LayoutTemplate size={22} /><strong>Start with a layout</strong><span>Drag Container or Grid here, or drop a widget to create a full-width container.</span></div>}
+              {footerTemplate ? <div className="page-preview-template-shell page-preview-template-footer" data-page-editor-template-href={isFallbackSiteTemplate(footerTemplate) ? undefined : `/admin/appearance/templates/${footerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global footer</span>{isFallbackSiteTemplate(footerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${footerTemplate.id}/edit`} className="panel-link">Edit footer</Link>}</div><PageRenderer blocks={footerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode /></div> : null}
               {selectedBlock && selectedPath && selectionBox ? <div className="page-preview-selection" style={{ top: selectionBox.top, left: selectionBox.left, width: selectionBox.width, height: selectionBox.height }} aria-label={`${blockLabel(selectedBlock)} selected`}><div className="page-preview-selection-handle" onClick={(event) => event.stopPropagation()}><button type="button" className="page-preview-selection-edit" aria-label={selectedEditLabel} title={selectedEditLabel} data-tooltip={selectedEditLabel} onClick={() => selectBlock(selectedBlock.id)}><Pencil size={13} aria-hidden="true" /></button><button type="button" className="page-preview-selection-delete" aria-label={`Delete ${blockLabel(selectedBlock).toLowerCase()}`} title="Delete" data-tooltip="Delete" onClick={() => deleteBlock(selectedPath)}><X size={14} aria-hidden="true" /></button></div></div> : null}
               {contextMenu ? (() => {
                 const contextPath = findBlockPath(blocks, contextMenu.blockId);

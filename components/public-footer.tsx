@@ -1,10 +1,13 @@
 import { Mail, MapPin, Phone } from "lucide-react";
-import { getNavigationItemsForLocation, type NavigationMenuItemView } from "@/lib/navigation";
+import { PageRenderer } from "@/components/page-renderer";
+import { getNavigationItemsForLocation, getNavigationMenus, type NavigationMenuItemView } from "@/lib/navigation";
 import { PublicNavigation } from "@/components/public-navigation";
 import { getSiteSettings, siteAddressLines, siteContactEmail } from "@/lib/site-settings";
+import { getActiveSiteTemplate } from "@/lib/templates";
 
 export async function PublicFooter() {
-  const [settings, navigationItems] = await Promise.all([getSiteSettings(), getNavigationItemsForLocation("footer")]);
+  const [settings, navigationItems, navigationMenus, template] = await Promise.all([getSiteSettings(), getNavigationItemsForLocation("footer"), getNavigationMenus(), getActiveSiteTemplate("footer")]);
+  if (template) return <footer className="public-footer public-template-footer"><div className="public-template-renderer"><PageRenderer blocks={template.blocks} navigationMenus={navigationMenus} /></div></footer>;
   const address = siteAddressLines(settings);
   const email = siteContactEmail(settings);
   const fallbackFooterItems: NavigationMenuItemView[] = [
