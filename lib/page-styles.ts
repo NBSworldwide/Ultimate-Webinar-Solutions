@@ -1,4 +1,4 @@
-import type { PageBlockLayout, PageBlockLayoutResponsive, PageBlockStyle, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber, PageStyleResponsiveString } from "@/lib/types";
+import type { PageBlockLayout, PageBlockLayoutResponsive, PageBlockStyle, PageBlockTransformValues, PageContainerAlign, PageContainerContentWidth, PageContainerDirection, PageContainerJustify, PageContainerMode, PageContainerSpacing, PageContainerWrap, PageStyleBox, PageStyleDevice, PageStyleEdges, PageStyleNumber, PageStyleResponsiveString, PageStyleUnit } from "@/lib/types";
 
 export const PAGE_STYLE_DEVICES: Array<{ key: PageStyleDevice; label: string }> = [
   { key: "widescreen", label: "Widescreen" },
@@ -65,6 +65,17 @@ function responsiveStrings<T extends string>(value: unknown, allowed: readonly T
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function responsiveCustomUnits(value: unknown): PageStyleResponsiveString<string> | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  const result: PageStyleResponsiveString<string> = {};
+  for (const key of deviceKeys) {
+    const next = stringValue(source[key], 12);
+    if (next && /^[a-z%]+$/i.test(next)) result[key] = next;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function edges(value: unknown, min: number, max: number): PageStyleEdges | undefined {
   const source = record(value);
   if (!source) return undefined;
@@ -87,6 +98,22 @@ function responsiveEdges(value: unknown, min: number, max: number): PageStyleBox
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function normalizeTransformValues(value: unknown): PageBlockTransformValues | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  const result: PageBlockTransformValues = {
+    rotate: responsiveNumbers(source.rotate, -360, 360),
+    offsetX: responsiveNumbers(source.offsetX, -2_000, 2_000),
+    offsetY: responsiveNumbers(source.offsetY, -2_000, 2_000),
+    scale: responsiveNumbers(source.scale, 0, 4),
+    skewX: responsiveNumbers(source.skewX, -180, 180),
+    skewY: responsiveNumbers(source.skewY, -180, 180),
+  };
+  if (typeof source.flipHorizontal === "boolean") result.flipHorizontal = source.flipHorizontal;
+  if (typeof source.flipVertical === "boolean") result.flipVertical = source.flipVertical;
+  return Object.values(result).some((entry) => entry !== undefined) ? result : undefined;
+}
+
 export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefined {
   const source = record(input);
   if (!source) return undefined;
@@ -107,6 +134,35 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
   if (zIndex !== undefined) result.zIndex = Math.round(zIndex);
   result.margin = responsiveEdges(source.margin, -500, 500);
   result.padding = responsiveEdges(source.padding, 0, 500);
+  const units = record(source.units);
+  if (units) {
+    const normalizedUnits: NonNullable<PageBlockStyle["units"]> = {};
+    for (const key of ["margin", "padding", "borderRadius", "paragraphSpacing", "verticalHeight", "verticalLetterSpacing", "verticalWordSpacing", "verticalTextIndent", "verticalLineHeight"] as const) {
+      const selected = responsiveStrings(units[key], ["px", "%", "em", "rem", "vw", "custom"] as const);
+      if (selected) normalizedUnits[key] = selected;
+      const custom = responsiveCustomUnits(units[`${key}Custom`]);
+      if (custom) normalizedUnits[`${key}Custom`] = custom;
+    }
+    if (Object.keys(normalizedUnits).length > 0) result.units = normalizedUnits;
+  }
+  const size = enumValue(source.size, ["default", "grow", "shrink", "full"] as const);
+  if (size) result.size = size;
+
+  const transform = record(source.transform);
+  if (transform) {
+    const normal = normalizeTransformValues(transform.normal);
+    const hover = normalizeTransformValues(transform.hover);
+    if (normal || hover) result.transform = { normal, hover };
+  }
+
+  const motion = record(source.motion);
+  if (motion) {
+    const entrance = enumValue(motion.entrance, ["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "zoom"] as const);
+    const duration = numberValue(motion.duration, 0, 10_000);
+    const delay = numberValue(motion.delay, 0, 10_000);
+    const sticky = enumValue(motion.sticky, ["none", "top", "bottom"] as const);
+    if (entrance || duration !== undefined || delay !== undefined || sticky) result.motion = { entrance, duration: duration === undefined ? undefined : Math.round(duration), delay: delay === undefined ? undefined : Math.round(delay), sticky };
+  }
 
   const typography = record(source.typography);
   if (typography) {
@@ -125,6 +181,11 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
     result.typography.lineHeight = responsiveNumbers(typography.lineHeight, 0.5, 4);
     result.typography.letterSpacing = responsiveNumbers(typography.letterSpacing, -20, 40);
     result.typography.wordSpacing = responsiveNumbers(typography.wordSpacing, -20, 80);
+    result.typography.paragraphSpacing = responsiveNumbers(typography.paragraphSpacing, 0, 300);
+    const textColor = colorValue(typography.textColor);
+    const linkColor = colorValue(typography.linkColor);
+    if (textColor) result.typography.textColor = textColor;
+    if (linkColor) result.typography.linkColor = linkColor;
     const textAlign = enumValue(typography.textAlign, ["left", "center", "right", "justify"] as const);
     if (textAlign) result.typography.textAlign = textAlign;
     const textStroke = record(typography.textStroke);
@@ -146,6 +207,24 @@ export function normalizePageBlockStyle(input: unknown): PageBlockStyle | undefi
       if (result.typography.textShadow.horizontal === undefined && result.typography.textShadow.vertical === undefined && result.typography.textShadow.blur === undefined && result.typography.textShadow.color === undefined) delete result.typography.textShadow;
     }
     if (Object.keys(result.typography).length === 0) delete result.typography;
+  }
+
+  const verticalText = record(source.verticalText);
+  if (verticalText) {
+    result.verticalText = {};
+    if (typeof verticalText.enabled === "boolean") result.verticalText.enabled = verticalText.enabled;
+    const writingMode = enumValue(verticalText.writingMode, ["vertical-rl", "vertical-lr"] as const);
+    if (writingMode) result.verticalText.writingMode = writingMode;
+    if (typeof verticalText.flip === "boolean") result.verticalText.flip = verticalText.flip;
+    result.verticalText.height = responsiveNumbers(verticalText.height, 0, 3_000);
+    if (typeof verticalText.upright === "boolean") result.verticalText.upright = verticalText.upright;
+    result.verticalText.letterSpacing = responsiveNumbers(verticalText.letterSpacing, -20, 80);
+    result.verticalText.wordSpacing = responsiveNumbers(verticalText.wordSpacing, -20, 120);
+    result.verticalText.textIndent = responsiveNumbers(verticalText.textIndent, -300, 300);
+    result.verticalText.lineHeight = responsiveNumbers(verticalText.lineHeight, 0.5, 4);
+    const verticalStyle = enumValue(verticalText.style, ["normal", "upright"] as const);
+    if (verticalStyle) result.verticalText.style = verticalStyle;
+    if (Object.keys(result.verticalText).length === 0) delete result.verticalText;
   }
 
   const background = record(source.background);
@@ -411,14 +490,27 @@ function setResponsiveStringVariable(target: Record<string, string>, prefix: str
   }
 }
 
-function setResponsiveEdgeVariables(target: Record<string, string>, prefix: string, values: PageStyleBox | undefined, format: (value: number) => string) {
+function setResponsiveEdgeVariables(target: Record<string, string>, prefix: string, values: PageStyleBox | undefined, format: (value: number, unit: string) => string, units?: PageStyleResponsiveString<PageStyleUnit>, customUnits?: PageStyleResponsiveString<string>) {
   if (!values) return;
   for (const device of deviceKeys) {
     const value = values[device];
     if (!value) continue;
+    const selectedUnit = units?.[device] ?? units?.desktop ?? "px";
+    const unit = selectedUnit === "custom" ? customUnits?.[device] ?? customUnits?.desktop ?? "px" : selectedUnit;
     for (const edge of ["top", "right", "bottom", "left"] as const) {
-      if (value[edge] !== undefined) target[`${prefix}-${edge}-${device}`] = format(value[edge]);
+      if (value[edge] !== undefined) target[`${prefix}-${edge}-${device}`] = format(value[edge], unit);
     }
+  }
+}
+
+function setResponsiveUnitVariable(target: Record<string, string>, prefix: string, values: PageStyleNumber | undefined, units?: PageStyleResponsiveString<PageStyleUnit>, customUnits?: PageStyleResponsiveString<string>, fallbackUnit = "px") {
+  if (!values) return;
+  for (const device of deviceKeys) {
+    const value = values[device];
+    if (value === undefined) continue;
+    const selectedUnit = units?.[device] ?? units?.desktop ?? fallbackUnit;
+    const unit = selectedUnit === "custom" ? customUnits?.[device] ?? customUnits?.desktop ?? fallbackUnit : selectedUnit;
+    target[`${prefix}-${device}`] = `${value}${unit}`;
   }
 }
 
@@ -454,8 +546,31 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
   if (style.alignSelf) css["--block-align-self"] = style.alignSelf === "default" ? "auto" : style.alignSelf === "center" ? "center" : style.alignSelf === "end" ? "end" : style.alignSelf === "stretch" ? "stretch" : "start";
   if (style.position) css["--block-position"] = style.position === "default" ? "static" : style.position;
   if (style.zIndex !== undefined) css["--block-z-index"] = String(style.zIndex);
-  setResponsiveEdgeVariables(css, "--block-margin", style.margin, (value) => `${value}px`);
-  setResponsiveEdgeVariables(css, "--block-padding", style.padding, (value) => `${value}px`);
+  if (style.size) {
+    css["--block-size-flex"] = style.size === "grow" ? "1 1 auto" : style.size === "shrink" ? "0 1 auto" : style.size === "full" ? "0 0 100%" : "initial";
+  }
+  setResponsiveEdgeVariables(css, "--block-margin", style.margin, (value, unit) => `${value}${unit}`, style.units?.margin, style.units?.marginCustom);
+  setResponsiveEdgeVariables(css, "--block-padding", style.padding, (value, unit) => `${value}${unit}`, style.units?.padding, style.units?.paddingCustom);
+
+  const transformCss = (values: PageBlockTransformValues | undefined, device: PageStyleDevice): string | undefined => {
+    if (!values) return undefined;
+    const read = (value: PageStyleNumber | undefined, fallback: number) => value?.[device] ?? value?.desktop ?? fallback;
+    const rotate = read(values.rotate, 0);
+    const offsetX = read(values.offsetX, 0);
+    const offsetY = read(values.offsetY, 0);
+    const scale = read(values.scale, 1);
+    const skewX = read(values.skewX, 0);
+    const skewY = read(values.skewY, 0);
+    const flipX = values.flipHorizontal ? -1 : 1;
+    const flipY = values.flipVertical ? -1 : 1;
+    return `translate(${offsetX}px, ${offsetY}px) rotate(${rotate}deg) skew(${skewX}deg, ${skewY}deg) scale(${scale * flipX}, ${scale * flipY})`;
+  };
+  for (const device of deviceKeys) {
+    const normal = transformCss(style.transform?.normal, device);
+    const hover = transformCss(style.transform?.hover, device);
+    if (normal) css[`--block-transform-${device}`] = normal;
+    if (hover) css[`--block-transform-hover-${device}`] = hover;
+  }
 
   const widget = style.widget;
   if (widget) {
@@ -499,6 +614,9 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
     setResponsiveVariable(css, "--block-line-height", typography.lineHeight, String);
     setResponsiveVariable(css, "--block-letter-spacing", typography.letterSpacing, (value) => `${value}px`);
     setResponsiveVariable(css, "--block-word-spacing", typography.wordSpacing, (value) => `${value}px`);
+    setResponsiveUnitVariable(css, "--block-paragraph-spacing", typography.paragraphSpacing, style.units?.paragraphSpacing, style.units?.paragraphSpacingCustom);
+    if (typography.textColor) css["--block-text-color"] = typography.textColor;
+    if (typography.linkColor) css["--block-link-color"] = typography.linkColor;
     if (typography.textAlign) css["--block-text-align"] = typography.textAlign;
     if (typography.textStroke) {
       setResponsiveVariable(css, "--block-text-stroke", typography.textStroke.width, (value) => `${value}px`);
@@ -511,6 +629,20 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
       setResponsiveVariable(css, "--block-text-shadow-y", shadow.vertical, (value) => `${value}px`);
       setResponsiveVariable(css, "--block-text-shadow-blur", shadow.blur, (value) => `${value}px`);
     }
+  }
+
+  const verticalText = style.verticalText;
+  if (verticalText) {
+    if (verticalText.enabled) {
+      css["--block-writing-mode"] = verticalText.writingMode ?? "vertical-rl";
+      css["--block-text-orientation"] = verticalText.upright || verticalText.style === "upright" ? "upright" : "mixed";
+      css["--block-vertical-flip"] = verticalText.flip ? "180deg" : "0deg";
+    }
+    setResponsiveUnitVariable(css, "--block-vertical-height", verticalText.height, style.units?.verticalHeight, style.units?.verticalHeightCustom);
+    setResponsiveUnitVariable(css, "--block-vertical-letter-spacing", verticalText.letterSpacing, style.units?.verticalLetterSpacing, style.units?.verticalLetterSpacingCustom);
+    setResponsiveUnitVariable(css, "--block-vertical-word-spacing", verticalText.wordSpacing, style.units?.verticalWordSpacing, style.units?.verticalWordSpacingCustom);
+    setResponsiveUnitVariable(css, "--block-vertical-text-indent", verticalText.textIndent, style.units?.verticalTextIndent, style.units?.verticalTextIndentCustom);
+    setResponsiveUnitVariable(css, "--block-vertical-line-height", verticalText.lineHeight, style.units?.verticalLineHeight, style.units?.verticalLineHeightCustom, "");
   }
 
   const background = style.background;
@@ -547,7 +679,7 @@ export function pageBlockStyleToCss(input: PageBlockStyle | undefined): Record<s
     if (border.type && border.type !== "default") css["--block-border-style"] = border.type;
     if (border.color) css["--block-border-color"] = border.color;
     setResponsiveEdgeVariables(css, "--block-border-width", border.width, (value) => `${value}px`);
-    setResponsiveEdgeVariables(css, "--block-border-radius", border.radius, (value) => `${value}px`);
+    setResponsiveEdgeVariables(css, "--block-border-radius", border.radius, (value, unit) => `${value}${unit}`, style.units?.borderRadius, style.units?.borderRadiusCustom);
     if (border.shadow) {
       const horizontal = border.shadow.horizontal ?? 0;
       const vertical = border.shadow.vertical ?? 0;

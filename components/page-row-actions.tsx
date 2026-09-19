@@ -115,14 +115,16 @@ export function PageRowActions({ page }: { page: ContentPage }) {
   }
 
   return <>
-    <div className="page-row-actions">
-      <Link className="button button-secondary button-small" href={`/admin/pages/${page.id}/edit`}><Pencil size={13} /> Edit</Link>
-      <button type="button" className="button button-secondary button-small" onClick={() => quickEditOpen ? setQuickEditOpen(false) : openQuickEdit()} aria-expanded={quickEditOpen} aria-controls={`quick-edit-${page.id}`} disabled={savingQuickEdit}>{quickEditOpen ? "Close quick edit" : "Quick edit"}</button>
-      {page.status === "published" ? <Link className="button button-secondary button-small" href={publicPath(page)} target="_blank" rel="noreferrer"><ExternalLink size={13} /> View</Link> : null}
+    <div className="page-row-homepage">
       <label className={`page-homepage-toggle${homepage ? " is-checked" : ""}`} title={page.status === "published" ? (homepage ? "This page is the homepage" : "Use this page as the homepage") : "Publish this page before setting it as the homepage"}>
         <input type="checkbox" checked={homepage} onChange={(event) => void changeHomepage(event.target.checked)} disabled={page.status !== "published" || changingHomepage || changingStatus} aria-label={`Use ${page.title} as homepage`} />
-        <span>{changingHomepage ? "Updating…" : "Homepage"}</span>
+        <span>{changingHomepage ? "Updating…" : homepage ? "Yes" : "No"}</span>
       </label>
+    </div>
+    <div className="page-row-actions">
+      <button type="button" className="button button-secondary button-small" onClick={() => quickEditOpen ? setQuickEditOpen(false) : openQuickEdit()} aria-expanded={quickEditOpen} aria-controls={`quick-edit-${page.id}`} disabled={savingQuickEdit}>{quickEditOpen ? "Close quick edit" : "Quick edit"}</button>
+      <Link className="button button-secondary button-small" href={`/admin/pages/${page.id}/edit`}><Pencil size={13} /> Edit</Link>
+      {page.status === "published" ? <Link className="button button-secondary button-small" href={publicPath(page)} target="_blank" rel="noreferrer"><ExternalLink size={13} /> View</Link> : null}
       {page.status !== "archived" ? <button type="button" className="button button-secondary button-small" onClick={() => void changeStatus("archived")} disabled={changingStatus}><Archive size={13} /> Archive</button> : <><button type="button" className="button button-secondary button-small" onClick={() => void changeStatus("published")} disabled={changingStatus}><ArchiveRestore size={13} /> {changingStatus ? "Unarchiving…" : "Unarchive"}</button><button type="button" className="button button-secondary button-small button-danger" onClick={() => setConfirmingDelete(true)} disabled={deleting || changingStatus}><Trash2 size={13} /> Delete</button></>}
     </div>
     {quickEditOpen ? <form id={`quick-edit-${page.id}`} className="page-quick-edit" onSubmit={(event) => void saveQuickEdit(event)}>

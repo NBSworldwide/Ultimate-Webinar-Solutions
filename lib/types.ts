@@ -406,6 +406,27 @@ export interface PageBlockLayoutResponsive {
 export type PageStyleNumber = Partial<Record<PageStyleDevice, number>>;
 export interface PageStyleEdges { top?: number; right?: number; bottom?: number; left?: number; }
 export type PageStyleBox = Partial<Record<PageStyleDevice, PageStyleEdges>>;
+export type PageStyleUnit = "px" | "%" | "em" | "rem" | "vw" | "custom";
+export interface PageStyleUnits {
+  margin?: PageStyleResponsiveString<PageStyleUnit>;
+  padding?: PageStyleResponsiveString<PageStyleUnit>;
+  borderRadius?: PageStyleResponsiveString<PageStyleUnit>;
+  marginCustom?: PageStyleResponsiveString<string>;
+  paddingCustom?: PageStyleResponsiveString<string>;
+  borderRadiusCustom?: PageStyleResponsiveString<string>;
+  paragraphSpacing?: PageStyleResponsiveString<PageStyleUnit>;
+  paragraphSpacingCustom?: PageStyleResponsiveString<string>;
+  verticalHeight?: PageStyleResponsiveString<PageStyleUnit>;
+  verticalHeightCustom?: PageStyleResponsiveString<string>;
+  verticalLetterSpacing?: PageStyleResponsiveString<PageStyleUnit>;
+  verticalLetterSpacingCustom?: PageStyleResponsiveString<string>;
+  verticalWordSpacing?: PageStyleResponsiveString<PageStyleUnit>;
+  verticalWordSpacingCustom?: PageStyleResponsiveString<string>;
+  verticalTextIndent?: PageStyleResponsiveString<PageStyleUnit>;
+  verticalTextIndentCustom?: PageStyleResponsiveString<string>;
+  verticalLineHeight?: PageStyleResponsiveString<PageStyleUnit>;
+  verticalLineHeightCustom?: PageStyleResponsiveString<string>;
+}
 export type PageStyleBorderType = "default" | "none" | "solid" | "double" | "dotted" | "dashed" | "groove";
 export type PageStyleBackgroundMode = "none" | "classic" | "gradient" | "video" | "slideshow";
 export type PageStyleGradientType = "linear" | "radial";
@@ -415,6 +436,29 @@ export type PageStyleMaskPosition = "center" | "top" | "right" | "bottom" | "lef
 export type PageStyleMaskRepeat = "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
 export type PageStyleResponsiveString<T extends string> = Partial<Record<PageStyleDevice, T>>;
 export type PageStyleAspectRatio = "1/1" | "3/2" | "4/3" | "16/9" | "21/9" | "9/16";
+
+export interface PageBlockTransformValues {
+  rotate?: PageStyleNumber;
+  offsetX?: PageStyleNumber;
+  offsetY?: PageStyleNumber;
+  scale?: PageStyleNumber;
+  skewX?: PageStyleNumber;
+  skewY?: PageStyleNumber;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+}
+
+export interface PageBlockTransform {
+  normal?: PageBlockTransformValues;
+  hover?: PageBlockTransformValues;
+}
+
+export interface PageBlockMotion {
+  entrance?: "none" | "fade" | "slide-up" | "slide-down" | "slide-left" | "slide-right" | "zoom";
+  duration?: number;
+  delay?: number;
+  sticky?: "none" | "top" | "bottom";
+}
 
 export interface PageBlockStyle {
   widthMode?: "default" | "full" | "inline" | "custom";
@@ -428,6 +472,10 @@ export interface PageBlockStyle {
   zIndex?: number;
   margin?: PageStyleBox;
   padding?: PageStyleBox;
+  units?: PageStyleUnits;
+  size?: "default" | "grow" | "shrink" | "full";
+  transform?: PageBlockTransform;
+  motion?: PageBlockMotion;
   typography?: {
     fontFamily?: "default" | "Manrope" | "DM Mono" | "Inter" | "Arial" | "Georgia" | "Verdana";
     fontSize?: PageStyleNumber;
@@ -438,9 +486,24 @@ export interface PageBlockStyle {
     lineHeight?: PageStyleNumber;
     letterSpacing?: PageStyleNumber;
     wordSpacing?: PageStyleNumber;
+    paragraphSpacing?: PageStyleNumber;
+    textColor?: string;
+    linkColor?: string;
     textAlign?: "left" | "center" | "right" | "justify";
     textStroke?: { width?: PageStyleNumber; color?: string };
-    textShadow?: { horizontal?: PageStyleNumber; vertical?: PageStyleNumber; blur?: PageStyleNumber; color?: string };
+      textShadow?: { horizontal?: PageStyleNumber; vertical?: PageStyleNumber; blur?: PageStyleNumber; color?: string };
+  };
+  verticalText?: {
+    enabled?: boolean;
+    writingMode?: "vertical-rl" | "vertical-lr";
+    flip?: boolean;
+    height?: PageStyleNumber;
+    upright?: boolean;
+    letterSpacing?: PageStyleNumber;
+    wordSpacing?: PageStyleNumber;
+    textIndent?: PageStyleNumber;
+    lineHeight?: PageStyleNumber;
+    style?: "normal" | "upright";
   };
   background?: {
     mode?: PageStyleBackgroundMode;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PAGE_STYLE_DEVICES } from "@/lib/page-styles";
 import { MediaPicker } from "@/components/media-picker";
+import { PageBlockRichTextStyleFields } from "@/components/page-block-rich-text-style-fields";
 import type {
   PageBlock,
   PageBlockStyle,
@@ -77,14 +78,16 @@ function EdgeControls({ title, group, device, linked, onToggleLink, edgeValue, s
   </div>;
 }
 
-export function PageBlockStyleFields({ block, onChange }: {
+export function PageBlockStyleFields({ block, onChange, showDeviceTabs = true }: {
   block: PageBlock;
   onChange: (style: PageBlockStyle | undefined) => void;
+  showDeviceTabs?: boolean;
 }) {
   const [device, setDevice] = useState<PageStyleDevice>("desktop");
   const style = block.style ?? {};
   const baseId = `page-style-${block.id}`;
   const [linkedEdges, setLinkedEdges] = useState<Record<EdgeGroup, boolean>>({ margin: false, padding: false, borderWidth: false, borderRadius: false });
+  const showStructuralStyleGroups = false;
 
   function update(next: PageBlockStyle) {
     onChange(next);
@@ -218,12 +221,14 @@ export function PageBlockStyleFields({ block, onChange }: {
     <summary>Style and responsive controls</summary>
     <div className="page-style-panel-body">
       <p className="page-style-help">Shared controls apply to this block in the live preview and on the published page. Values can be tailored per device.</p>
-      <div className="page-style-device-tabs" role="tablist" aria-label="Responsive style device">
+      {showDeviceTabs ? <div className="page-style-device-tabs" role="tablist" aria-label="Responsive style device">
         <span>Device</span>
         {PAGE_STYLE_DEVICES.map(({ key, label }) => <button type="button" key={key} className={device === key ? "is-active" : ""} onClick={() => setDevice(key)} role="tab" aria-selected={device === key}>{label}</button>)}
-      </div>
+      </div> : null}
 
-      <details className="page-style-group" open>
+      {block.type === "rich_text" ? <PageBlockRichTextStyleFields style={style} device={device} onChange={update} /> : null}
+
+      {showStructuralStyleGroups ? <details className="page-style-group" name="page-style-accordion" open>
         <summary>Layout</summary>
         <div className="page-style-grid">
           <label className="field"><span>Width behavior</span><select value={style.widthMode ?? "default"} onChange={(event) => update({ ...style, widthMode: event.target.value as PageBlockStyle["widthMode"] })}><option value="default">Default</option><option value="full">Full width</option><option value="inline">Inline / auto</option><option value="custom">Custom percentage</option></select></label>
@@ -235,9 +240,9 @@ export function PageBlockStyleFields({ block, onChange }: {
           <label className="field"><span>Position</span><select value={style.position ?? "default"} onChange={(event) => update({ ...style, position: event.target.value as PageBlockStyle["position"] })}><option value="default">Default</option><option value="relative">Relative</option><option value="absolute">Absolute</option><option value="fixed">Fixed</option></select></label>
           <NumberControl id={`${baseId}-z-index`} label="Z-index" value={numberText(style.zIndex)} min={-1_000} max={10_000} onChange={(value) => update({ ...style, zIndex: value === "" ? undefined : Number(value) })} unit="" />
         </div>
-      </details>
+      </details> : null}
 
-      {(["image", "image_box", "video", "map", "icon", "icon_box"] as string[]).includes(block.type) ? <details className="page-style-group">
+      {(["image", "image_box", "video", "map", "icon", "icon_box"] as string[]).includes(block.type) ? <details className="page-style-group" name="page-style-accordion">
         <summary>Widget-specific controls</summary>
         {(["image", "image_box"].includes(block.type)) ? <>
           {block.type === "image_box" ? <div className="page-style-grid"><label className="field"><span>Image position</span><select value={style.widget?.imagePosition ?? "top"} onChange={(event) => setWidget("imagePosition", event.target.value)}><option value="left">Left</option><option value="top">Above</option><option value="right">Right</option><option value="bottom">Below</option></select></label><label className="field"><span>Image alignment</span><select value={style.widget?.imageAlign ?? "left"} onChange={(event) => setWidget("imageAlign", event.target.value)}><option value="left">Start</option><option value="center">Center</option><option value="right">End</option></select></label><NumberControl id={`${baseId}-image-spacing`} label="Image spacing" value={numberText(style.widget?.imageSpacing)} min={0} max={300} onChange={(value) => setWidget("imageSpacing", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-content-spacing`} label="Content spacing" value={numberText(style.widget?.contentSpacing)} min={0} max={300} onChange={(value) => setWidget("contentSpacing", value === "" ? undefined : Number(value))} /></div> : null}
@@ -245,9 +250,9 @@ export function PageBlockStyleFields({ block, onChange }: {
         </> : null}
         {block.type === "video" || block.type === "map" ? <div className="page-style-grid"><label className="field"><span>Aspect ratio</span><select value={style.widget?.aspectRatio ?? "16/9"} onChange={(event) => setWidget("aspectRatio", event.target.value as PageStyleAspectRatio)}><option value="1/1">1:1</option><option value="3/2">3:2</option><option value="4/3">4:3</option><option value="16/9">16:9</option><option value="21/9">21:9</option><option value="9/16">9:16</option></select></label><div className="page-style-subgroup"><div className="page-style-grid"><NumberControl id={`${baseId}-media-filter-blur`} label="Blur" value={numberText(style.widget?.filter?.blur?.[device] ?? style.widget?.filter?.blur?.desktop)} min={0} max={40} onChange={(value) => setWidgetFilter("blur", value)} /><NumberControl id={`${baseId}-media-filter-brightness`} label="Brightness" value={numberText(style.widget?.filter?.brightness?.[device] ?? style.widget?.filter?.brightness?.desktop)} min={0} max={3} step={0.05} onChange={(value) => setWidgetFilter("brightness", value)} unit="" /><NumberControl id={`${baseId}-media-filter-contrast`} label="Contrast" value={numberText(style.widget?.filter?.contrast?.[device] ?? style.widget?.filter?.contrast?.desktop)} min={0} max={3} step={0.05} onChange={(value) => setWidgetFilter("contrast", value)} unit="" /><NumberControl id={`${baseId}-media-filter-saturation`} label="Saturation" value={numberText(style.widget?.filter?.saturation?.[device] ?? style.widget?.filter?.saturation?.desktop)} min={0} max={3} step={0.05} onChange={(value) => setWidgetFilter("saturation", value)} unit="" /><NumberControl id={`${baseId}-media-filter-hue`} label="Hue" value={numberText(style.widget?.filter?.hue?.[device] ?? style.widget?.filter?.hue?.desktop)} min={-180} max={180} onChange={(value) => setWidgetFilter("hue", value)} unit="deg" /></div></div></div> : null}
         {block.type === "icon" || block.type === "icon_box" ? <div className="page-style-grid"><label className="field"><span>Icon alignment</span><select value={style.widget?.iconAlign ?? "center"} onChange={(event) => setWidget("iconAlign", event.target.value)}><option value="left">Start</option><option value="center">Center</option><option value="right">End</option></select></label><label className="page-style-color"><span>Icon color</span><input type="color" value={colorText(style.widget?.iconColor, "#0f776e")} onChange={(event) => setWidget("iconColor", event.target.value)} /></label><NumberControl id={`${baseId}-icon-size`} label="Icon size" value={numberText(style.widget?.iconSize?.[device] ?? style.widget?.iconSize?.desktop)} min={8} max={240} onChange={(value) => setWidgetNumber("iconSize", value, 8, 240)} /><NumberControl id={`${baseId}-icon-rotate`} label="Icon rotation" value={numberText(style.widget?.iconRotate?.[device] ?? style.widget?.iconRotate?.desktop)} min={-360} max={360} onChange={(value) => setWidgetNumber("iconRotate", value, -360, 360)} unit="deg" /></div> : null}
-      </details> : null}
+        </details> : null}
 
-      <details className="page-style-group">
+      {block.type !== "rich_text" ? <details className="page-style-group" name="page-style-accordion">
         <summary>Typography</summary>
         <div className="page-style-grid">
           <label className="field"><span>Font family</span><select value={style.typography?.fontFamily ?? "default"} onChange={(event) => setTypography("fontFamily", event.target.value)}><option value="default">Global default</option><option value="Manrope">Manrope</option><option value="DM Mono">DM Mono</option><option value="Inter">Inter</option><option value="Arial">Arial</option><option value="Georgia">Georgia</option><option value="Verdana">Verdana</option></select></label>
@@ -263,9 +268,9 @@ export function PageBlockStyleFields({ block, onChange }: {
         </div>
         <details className="page-style-subgroup"><summary>Text Stroke</summary><div className="page-style-grid"><NumberControl id={`${baseId}-text-stroke-width`} label="Stroke width" value={numberText(style.typography?.textStroke?.width?.[device] ?? style.typography?.textStroke?.width?.desktop)} min={0} max={20} step={0.5} onChange={(value) => setTypographyNestedNumber("textStroke", "width", value, 0, 20)} unit="px" /><label className="page-style-color"><span>Stroke color</span><input type="color" value={colorText(style.typography?.textStroke?.color, "#183b36")} onChange={(event) => setTypographyNested("textStroke", "color", event.target.value)} /></label></div></details>
         <details className="page-style-subgroup"><summary>Text Shadow</summary><div className="page-style-grid"><label className="page-style-color"><span>Shadow color</span><input type="color" value={colorText(style.typography?.textShadow?.color, "#183b36")} onChange={(event) => setTypographyNested("textShadow", "color", event.target.value)} /></label><NumberControl id={`${baseId}-text-shadow-horizontal`} label="Horizontal" value={numberText(style.typography?.textShadow?.horizontal?.[device] ?? style.typography?.textShadow?.horizontal?.desktop)} min={-200} max={200} onChange={(value) => setTypographyNestedNumber("textShadow", "horizontal", value, -200, 200)} unit="px" /><NumberControl id={`${baseId}-text-shadow-vertical`} label="Vertical" value={numberText(style.typography?.textShadow?.vertical?.[device] ?? style.typography?.textShadow?.vertical?.desktop)} min={-200} max={200} onChange={(value) => setTypographyNestedNumber("textShadow", "vertical", value, -200, 200)} unit="px" /><NumberControl id={`${baseId}-text-shadow-blur`} label="Blur" value={numberText(style.typography?.textShadow?.blur?.[device] ?? style.typography?.textShadow?.blur?.desktop)} min={0} max={300} onChange={(value) => setTypographyNestedNumber("textShadow", "blur", value, 0, 300)} unit="px" /></div></details>
-      </details>
+       </details> : null}
 
-      <details className="page-style-group">
+      {showStructuralStyleGroups ? <details className="page-style-group" name="page-style-accordion">
         <summary>Background</summary>
         <div className="page-style-grid"><label className="field"><span>Background type</span><select value={style.background?.mode ?? "none"} onChange={(event) => setBackground("mode", event.target.value)}><option value="none">None</option><option value="classic">Classic color or image</option><option value="gradient">Gradient</option><option value="video">Video</option><option value="slideshow">Slideshow</option></select></label></div>
         {style.background?.mode === "classic" ? <div className="page-style-subgroup">
@@ -279,32 +284,32 @@ export function PageBlockStyleFields({ block, onChange }: {
         </div> : null}
         {style.background?.mode === "video" ? <div className="page-style-subgroup"><div className="page-style-grid"><label className="field"><span>Video source</span><select value={style.background.videoSource ?? "file"} onChange={(event) => setBackground("videoSource", event.target.value)}><option value="file">Hosted video file</option><option value="youtube">YouTube</option><option value="vimeo">Vimeo</option></select></label><NumberControl id={`${baseId}-video-start`} label="Start time" value={numberText(style.background.videoStart)} min={0} max={86400} onChange={(value) => setBackground("videoStart", value === "" ? undefined : Number(value))} unit="sec" /><NumberControl id={`${baseId}-video-end`} label="End time" value={numberText(style.background.videoEnd)} min={0} max={86400} onChange={(value) => setBackground("videoEnd", value === "" ? undefined : Number(value))} unit="sec" /></div><label className="field"><span>Video URL</span><input type="url" value={style.background.videoUrl ?? ""} onChange={(event) => setBackground("videoUrl", event.target.value)} placeholder="https://cdn.example.com/background.mp4" /></label><label className="field"><span>Fallback image</span><input type="url" value={style.background.videoFallbackImage ?? ""} onChange={(event) => setBackground("videoFallbackImage", event.target.value)} placeholder="https://images.example.com/background.jpg" /></label><small>Hosted files render as a muted looping background. YouTube and Vimeo use privacy-safe autoplay embeds when the provider URL is valid.</small></div> : null}
         {style.background?.mode === "slideshow" ? <div className="page-style-subgroup"><label className="field"><span>Slide images</span><textarea value={(style.background.slideshowImages ?? []).join("\n")} onChange={(event) => setBackground("slideshowImages", event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))} rows={4} placeholder="One HTTPS image URL per line" /></label><div className="page-style-grid"><label className="field"><span>Transition</span><select value={style.background.slideshowTransition ?? "fade"} onChange={(event) => setBackground("slideshowTransition", event.target.value)}><option value="fade">Fade</option><option value="slide">Slide</option></select></label><NumberControl id={`${baseId}-slideshow-duration`} label="Duration" value={numberText(style.background.slideshowDuration)} min={1000} max={60000} onChange={(value) => setBackground("slideshowDuration", value === "" ? undefined : Number(value))} unit="ms" /><NumberControl id={`${baseId}-slideshow-transition-duration`} label="Transition speed" value={numberText(style.background.slideshowTransitionDuration)} min={100} max={10000} onChange={(value) => setBackground("slideshowTransitionDuration", value === "" ? undefined : Number(value))} unit="ms" /></div><div className="page-style-grid"><label className="form-choice"><input type="checkbox" checked={style.background.slideshowInfinite ?? true} onChange={(event) => setBackground("slideshowInfinite", event.target.checked)} /><span>Infinite loop</span></label><label className="form-choice"><input type="checkbox" checked={style.background.slideshowLazyLoad ?? true} onChange={(event) => setBackground("slideshowLazyLoad", event.target.checked)} /><span>Lazy load</span></label><label className="form-choice"><input type="checkbox" checked={style.background.slideshowKenBurns ?? false} onChange={(event) => setBackground("slideshowKenBurns", event.target.checked)} /><span>Ken Burns effect</span></label></div></div> : null}
-      </details>
+      </details> : null}
 
-      <details className="page-style-group">
+      {block.type !== "rich_text" ? <details className="page-style-group" name="page-style-accordion">
         <summary>Hover state</summary>
         <p className="page-style-help">Hover values apply when the visitor points to an interactive block or link.</p>
         <div className="page-style-color-grid"><div className="page-style-color-row"><label className="page-style-color"><span>Text color</span><input type="color" value={colorText(style.hover?.textColor, "#183b36")} onChange={(event) => setHover("textColor", event.target.value)} /></label><button type="button" className="button button-secondary button-small" onClick={() => setHover("textColor", undefined)}>Clear</button></div><div className="page-style-color-row"><label className="page-style-color"><span>Background color</span><input type="color" value={colorText(style.hover?.backgroundColor, "#d8f1ea")} onChange={(event) => setHover("backgroundColor", event.target.value)} /></label><button type="button" className="button button-secondary button-small" onClick={() => setHover("backgroundColor", undefined)}>Clear</button></div></div>
         <NumberControl id={`${baseId}-hover-opacity`} label="Hover opacity" value={numberText(style.hover?.opacity)} min={0} max={1} step={0.05} onChange={(value) => setHover("opacity", value === "" ? undefined : Number(value))} unit="" />
-      </details>
+      </details> : null}
 
-      <details className="page-style-group">
+      {showStructuralStyleGroups ? <details className="page-style-group" name="page-style-accordion">
         <summary>Border and shadow</summary>
         <div className="page-style-grid"><label className="field"><span>Border type</span><select value={style.border?.type ?? "default"} onChange={(event) => update({ ...style, border: { ...style.border, type: event.target.value as PageStyleBorderType } })}><option value="default">Default</option><option value="none">None</option><option value="solid">Solid</option><option value="double">Double</option><option value="dotted">Dotted</option><option value="dashed">Dashed</option><option value="groove">Groove</option></select></label><div className="page-style-color-row"><label className="page-style-color"><span>Border color</span><input type="color" value={colorText(style.border?.color, "#cbe5dd")} onChange={(event) => update({ ...style, border: { ...style.border, color: event.target.value } })} /></label><button type="button" className="button button-secondary button-small" onClick={() => update({ ...style, border: { ...style.border, color: undefined } })}>Clear</button></div></div>
         <EdgeControls title="Border width" group="borderWidth" device={device} linked={linkedEdges.borderWidth} onToggleLink={() => toggleEdges("borderWidth")} edgeValue={edgeValue} setEdges={setEdges} />
         <EdgeControls title="Border radius" group="borderRadius" device={device} linked={linkedEdges.borderRadius} onToggleLink={() => toggleEdges("borderRadius")} edgeValue={edgeValue} setEdges={setEdges} />
         <div className="page-style-subgroup"><div className="page-style-color-row"><label className="page-style-color"><span>Shadow color</span><input type="color" value={colorText(style.border?.shadow?.color, "#183b36")} onChange={(event) => setShadow("color", event.target.value)} /></label><button type="button" className="button button-secondary button-small" onClick={() => update({ ...style, border: { ...style.border, shadow: undefined } })}>Clear shadow</button></div><div className="page-style-grid"><NumberControl id={`${baseId}-shadow-horizontal`} label="Horizontal" value={numberText(style.border?.shadow?.horizontal)} min={-200} max={300} onChange={(value) => setShadow("horizontal", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-vertical`} label="Vertical" value={numberText(style.border?.shadow?.vertical)} min={-200} max={300} onChange={(value) => setShadow("vertical", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-blur`} label="Blur" value={numberText(style.border?.shadow?.blur)} min={0} max={300} onChange={(value) => setShadow("blur", value === "" ? undefined : Number(value))} /><NumberControl id={`${baseId}-shadow-spread`} label="Spread" value={numberText(style.border?.shadow?.spread)} min={-200} max={300} onChange={(value) => setShadow("spread", value === "" ? undefined : Number(value))} /><label className="field"><span>Shadow position</span><select value={style.border?.shadow?.position ?? "outline"} onChange={(event) => setShadow("position", event.target.value)}><option value="outline">Outline</option><option value="inset">Inset</option></select></label></div></div>
-      </details>
+      </details> : null}
 
-      <details className="page-style-group">
+      {showStructuralStyleGroups ? <details className="page-style-group" name="page-style-accordion">
         <summary>Mask</summary>
         <div className="page-style-grid"><label className="field"><span>Mask</span><select value={style.mask?.enabled ? "on" : "off"} onChange={(event) => setMask("enabled", event.target.value === "on")}><option value="off">Off</option><option value="on">On</option></select></label>{style.mask?.enabled ? <label className="field"><span>Shape</span><select value={style.mask.shape ?? "circle"} onChange={(event) => setMask("shape", event.target.value)}><option value="circle">Circle</option><option value="oval">Oval</option><option value="pill">Pill horizontal</option><option value="pill-vertical">Pill vertical</option><option value="triangle">Triangle</option><option value="diamond">Diamond</option><option value="hexagon">Hexagon</option><option value="blob">Blob</option><option value="custom">Custom image or SVG</option></select></label> : null}</div>
         {style.mask?.enabled && style.mask.shape === "custom" ? <label className="field"><span>Mask image or SVG URL</span><input type="url" value={style.mask.image ?? ""} onChange={(event) => setMask("image", event.target.value)} placeholder="https://images.example.com/mask.svg" /></label> : null}
         {style.mask?.enabled ? <div className="page-style-grid"><label className="field"><span>Mask size</span><select value={maskResponsiveValue("size", "cover")} onChange={(event) => setMaskResponsive("size", event.target.value)}><option value="auto">Auto</option><option value="contain">Contain</option><option value="cover">Cover</option></select></label><label className="field"><span>Mask position</span><select value={maskResponsiveValue("position", "center")} onChange={(event) => setMaskResponsive("position", event.target.value)}><option value="center">Center</option><option value="top">Top</option><option value="right">Right</option><option value="bottom">Bottom</option><option value="left">Left</option></select></label><label className="field"><span>Mask repeat</span><select value={maskResponsiveValue("repeat", "no-repeat")} onChange={(event) => setMaskResponsive("repeat", event.target.value)}><option value="no-repeat">No repeat</option><option value="repeat">Repeat</option><option value="repeat-x">Repeat horizontally</option><option value="repeat-y">Repeat vertically</option></select></label></div> : null}
         <p className="page-style-help">Masks are applied to the selected block without changing its layout box.</p>
-      </details>
+      </details> : null}
 
-      <details className="page-style-group">
+      {block.type !== "rich_text" ? <details className="page-style-group" name="page-style-accordion">
         <summary>Media Library shortcuts</summary>
         <p className="page-style-help">Choose reusable assets without leaving the Style panel. Direct URLs remain available in the controls above.</p>
         <div className="page-style-grid">
@@ -313,7 +318,7 @@ export function PageBlockStyleFields({ block, onChange }: {
           <div className="field"><span>Custom mask image or SVG</span><MediaPicker value={style.mask?.image ?? ""} onChange={(value) => setMask("image", value)} label="Choose mask" /></div>
           <div className="field"><span>Add slideshow image</span><MediaPicker value="" onChange={(value) => setBackground("slideshowImages", [...(style.background?.slideshowImages ?? []), value])} label="Add slide" /></div>
         </div>
-      </details>
+      </details> : null}
       <button type="button" className="button button-secondary button-small page-style-reset" onClick={() => onChange(undefined)}>Reset block styling</button>
     </div>
   </details>;

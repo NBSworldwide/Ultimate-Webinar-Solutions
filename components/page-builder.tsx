@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type DragEvent, type MouseEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPenLine, Code2, Copy, GripVertical, Image, LayoutTemplate, MapPin, MapPinned, Menu, Megaphone, Minus, MousePointerClick, Package, Pencil, Plus, Save, Trash2, Type, Video, X } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bold, ClipboardPenLine, Code2, Copy, GripVertical, Image, Italic, LayoutTemplate, List, ListOrdered, MapPin, MapPinned, Menu, Megaphone, Minus, MousePointerClick, Package, Pencil, Plus, Quote, Redo2, RemoveFormatting, Save, Strikethrough, Trash2, Type, Underline, Undo2, Video, X } from "lucide-react";
 import Link from "next/link";
 import { PageRenderer } from "@/components/page-renderer";
 import { PageBlockStyleFields } from "@/components/page-block-style-fields";
+import { PageBlockAdvancedStyleFields } from "@/components/page-block-advanced-style-fields";
 import { MediaPicker } from "@/components/media-picker";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { PAGE_STYLE_DEVICES } from "@/lib/page-styles";
@@ -449,6 +450,7 @@ function RichTextFields({ block, onChange }: { block: PageBlock; onChange: (key:
   const visualRef = useRef<HTMLDivElement>(null);
   const body = String(block.data.body ?? "");
   const [mode, setMode] = useState<"visual" | "code">("visual");
+  const [blockFormat, setBlockFormat] = useState(String(block.data.textFormat ?? "p"));
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
 
@@ -499,7 +501,59 @@ function RichTextFields({ block, onChange }: { block: PageBlock; onChange: (key:
     setImageAlt("");
   }
 
-  return <div className="page-builder-fields"><div className="field"><label htmlFor={`page-${block.id}-heading`}>Heading</label><input id={`page-${block.id}-heading`} value={String(block.data.heading ?? "")} onChange={(event) => onChange("heading", event.target.value)} /></div><div className="rich-text-toolbar" aria-label="Rich text formatting"><div className="rich-text-mode-switch" role="tablist" aria-label="Editor mode"><button type="button" className={`button button-small ${mode === "visual" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "visual"} onClick={() => setMode("visual")}>Visual</button><button type="button" className={`button button-small ${mode === "code" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "code"} onClick={() => setMode("code")}>Code</button></div><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("bold") : replaceSelection("<strong>", "</strong>")}><strong>B</strong></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("italic") : replaceSelection("<em>", "</em>")}><em>I</em></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("underline") : replaceSelection("<u>", "</u>")}><u>U</u></button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("strikeThrough") : replaceSelection("<s>", "</s>")}>S</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("insertUnorderedList") : replaceSelection("<ul><li>", "</li></ul>")}>• List</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("insertOrderedList") : replaceSelection("<ol><li>", "</li></ol>")}>1. List</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("formatBlock", "blockquote") : replaceSelection("<blockquote>", "</blockquote>")}>Quote</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("removeFormat") : replaceSelection("", "")}>Clear</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("undo") : replaceSelection("", "")}>Undo</button><button type="button" className="button button-secondary button-small" onClick={() => mode === "visual" ? runVisualCommand("redo") : replaceSelection("", "")}>Redo</button><label className="rich-text-tool"><span>Color</span><input type="color" value={String(block.data.textColor || "#52615e")} onChange={(event) => { const color = event.target.value; onChange("textColor", color); mode === "visual" ? runVisualCommand("foreColor", color) : replaceSelection(`<span style="color:${color}">`, "</span>"); }} /></label><label className="rich-text-tool"><span>Size</span><select value={String(block.data.fontSize || "medium")} onChange={(event) => { const size = event.target.value; onChange("fontSize", size); const sizes: Record<string, string> = { small: "0.9rem", medium: "1rem", large: "1.2rem", xlarge: "1.5rem" }; mode === "visual" ? runVisualCommand("fontSize", size === "small" ? "2" : size === "large" ? "5" : size === "xlarge" ? "6" : "3") : replaceSelection(`<span style="font-size:${sizes[size] ?? sizes.medium}">`, "</span>"); }}><option value="small">Small</option><option value="medium">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><label className="rich-text-tool"><span>Align</span><select value={String(block.data.textAlign || "left")} onChange={(event) => { const align = event.target.value; onChange("textAlign", align); if (mode === "visual") runVisualCommand(align === "center" ? "justifyCenter" : align === "right" ? "justifyRight" : align === "justify" ? "justifyFull" : "justifyLeft"); }}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justified</option></select></label></div>{mode === "visual" ? <div ref={visualRef} id={`page-${block.id}-body-visual`} className="rich-text-editor rich-text-editor-visual" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" onInput={syncVisual} /> : <textarea ref={textareaRef} id={`page-${block.id}-body`} value={body} onChange={(event) => onChange("body", event.target.value)} placeholder="Write plain text or safe HTML source." />}{mode === "visual" ? <small>Visual mode edits the formatted content directly. Switch to Code to inspect or refine the sanitized HTML source.</small> : <small>Code mode accepts safe HTML. Formatting is sanitized on save; scripts, forms, unsafe URLs, and unapproved embeds are removed.</small>}<div className="rich-text-image-tools"><div className="field"><label htmlFor={`page-${block.id}-image-url`}>Insert image URL</label><input id={`page-${block.id}-image-url`} type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://images.example.com/photo.jpg" /></div><div className="field"><label htmlFor={`page-${block.id}-image-alt`}>Image alt text</label><input id={`page-${block.id}-image-alt`} value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Describe the image" /></div><button type="button" className="button button-secondary button-small" onClick={addImage}>Insert image</button></div></div>;
+  function applyBlockFormat(value: string) {
+    setBlockFormat(value);
+    onChange("textFormat", value);
+    if (mode === "visual") runVisualCommand("formatBlock", value);
+    else replaceSelection(`<${value}>`, `</${value}>`);
+  }
+
+  return <div className="page-builder-fields">
+    <div className="field"><label htmlFor={`page-${block.id}-heading`}>Heading</label><input id={`page-${block.id}-heading`} value={String(block.data.heading ?? "")} onChange={(event) => onChange("heading", event.target.value)} /></div>
+    <div className="rich-text-toolbar" aria-label="Rich text formatting">
+      <label className="rich-text-block-format"><span className="sr-only">Block type</span><select aria-label="Block type" value={blockFormat} onChange={(event) => applyBlockFormat(event.target.value)}><option value="p">Paragraph</option><option value="h1">Heading 1</option><option value="h2">Heading 2</option><option value="h3">Heading 3</option><option value="h4">Heading 4</option><option value="h5">Heading 5</option><option value="h6">Heading 6</option><option value="blockquote">Quote</option><option value="pre">Preformatted</option></select></label>
+      <span className="rich-text-toolbar-divider" aria-hidden="true" />
+      <button type="button" className="rich-text-icon-button" aria-label="Bold" title="Bold" onClick={() => mode === "visual" ? runVisualCommand("bold") : replaceSelection("<strong>", "</strong>")}><Bold size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Italic" title="Italic" onClick={() => mode === "visual" ? runVisualCommand("italic") : replaceSelection("<em>", "</em>")}><Italic size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Underline" title="Underline" onClick={() => mode === "visual" ? runVisualCommand("underline") : replaceSelection("<u>", "</u>")}><Underline size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Strikethrough" title="Strikethrough" onClick={() => mode === "visual" ? runVisualCommand("strikeThrough") : replaceSelection("<s>", "</s>")}><Strikethrough size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Bulleted list" title="Bulleted list" onClick={() => mode === "visual" ? runVisualCommand("insertUnorderedList") : replaceSelection("<ul><li>", "</li></ul>")}><List size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Numbered list" title="Numbered list" onClick={() => mode === "visual" ? runVisualCommand("insertOrderedList") : replaceSelection("<ol><li>", "</li></ol>")}><ListOrdered size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Quote" title="Quote" onClick={() => applyBlockFormat("blockquote")}><Quote size={16} /></button>
+      <span className="rich-text-toolbar-divider" aria-hidden="true" />
+      <button type="button" className="rich-text-icon-button" aria-label="Align left" title="Align left" onClick={() => { onChange("textAlign", "left"); mode === "visual" ? runVisualCommand("justifyLeft") : replaceSelection('<div style="text-align:left">', "</div>"); }}><AlignLeft size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Align center" title="Align center" onClick={() => { onChange("textAlign", "center"); mode === "visual" ? runVisualCommand("justifyCenter") : replaceSelection('<div style="text-align:center">', "</div>"); }}><AlignCenter size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Align right" title="Align right" onClick={() => { onChange("textAlign", "right"); mode === "visual" ? runVisualCommand("justifyRight") : replaceSelection('<div style="text-align:right">', "</div>"); }}><AlignRight size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Justify" title="Justify" onClick={() => { onChange("textAlign", "justify"); mode === "visual" ? runVisualCommand("justifyFull") : replaceSelection('<div style="text-align:justify">', "</div>"); }}><AlignJustify size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Clear formatting" title="Clear formatting" onClick={() => mode === "visual" ? runVisualCommand("removeFormat") : replaceSelection("", "")}><RemoveFormatting size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Undo" title="Undo" onClick={() => mode === "visual" ? runVisualCommand("undo") : replaceSelection("", "")}><Undo2 size={16} /></button>
+      <button type="button" className="rich-text-icon-button" aria-label="Redo" title="Redo" onClick={() => mode === "visual" ? runVisualCommand("redo") : replaceSelection("", "")}><Redo2 size={16} /></button>
+      <label className="rich-text-tool"><span>Color</span><input type="color" value={String(block.data.textColor || "#52615e")} onChange={(event) => { const color = event.target.value; onChange("textColor", color); mode === "visual" ? runVisualCommand("foreColor", color) : replaceSelection(`<span style="color:${color}">`, "</span>"); }} /></label>
+      <label className="rich-text-tool"><span>Size</span><select value={String(block.data.fontSize || "medium")} onChange={(event) => { const size = event.target.value; onChange("fontSize", size); const sizes: Record<string, string> = { small: "0.9rem", medium: "1rem", large: "1.2rem", xlarge: "1.5rem" }; mode === "visual" ? runVisualCommand("fontSize", size === "small" ? "2" : size === "large" ? "5" : size === "xlarge" ? "6" : "3") : replaceSelection(`<span style="font-size:${sizes[size] ?? sizes.medium}">`, "</span>"); }}><option value="small">Small</option><option value="medium">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label>
+      <label className="rich-text-tool"><span>Align</span><select value={String(block.data.textAlign || "left")} onChange={(event) => { const align = event.target.value; onChange("textAlign", align); if (mode === "visual") runVisualCommand(align === "center" ? "justifyCenter" : align === "right" ? "justifyRight" : align === "justify" ? "justifyFull" : "justifyLeft"); }}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justified</option></select></label>
+    </div>
+    <div className="rich-text-editor-shell">
+      <div className="rich-text-editor-header">
+        <span className="rich-text-editor-label">HTML content</span>
+        <div className="rich-text-mode-switch" role="tablist" aria-label="Editor mode">
+          <button type="button" className={`button button-small ${mode === "visual" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "visual"} onClick={() => setMode("visual")}>Visual</button>
+          <button type="button" className={`button button-small ${mode === "code" ? "button-primary" : "button-secondary"}`} role="tab" aria-selected={mode === "code"} onClick={() => setMode("code")}>Code</button>
+        </div>
+      </div>
+      {mode === "visual" ? <div ref={visualRef} id={`page-${block.id}-body-visual`} className="rich-text-editor rich-text-editor-visual" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" onInput={syncVisual} /> : <textarea ref={textareaRef} id={`page-${block.id}-body`} value={body} onChange={(event) => onChange("body", event.target.value)} placeholder="Write plain text or safe HTML source." />}
+    </div>
+    {mode === "visual" ? <small>Visual mode edits the formatted content directly. Switch to Code to inspect or refine the sanitized HTML source.</small> : <small>Code mode accepts safe HTML. Formatting is sanitized on save; scripts, forms, unsafe URLs, and unapproved embeds are removed.</small>}
+    <div className="rich-text-image-tools"><div className="field"><label htmlFor={`page-${block.id}-image-url`}>Insert image URL</label><input id={`page-${block.id}-image-url`} type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://images.example.com/photo.jpg" /></div><div className="field"><label htmlFor={`page-${block.id}-image-alt`}>Image alt text</label><input id={`page-${block.id}-image-alt`} value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Describe the image" /></div><button type="button" className="button button-secondary button-small" onClick={addImage}>Insert image</button></div>
+  </div>;
+}
+
+function RichTextLayoutFields({ block, onChange }: { block: PageBlock; onChange: (key: string, value: string | number) => void }) {
+  const columns = Math.min(6, Math.max(1, Number(block.data.columns) || 1));
+  return <div className="rich-text-layout-fields">
+    <label className="page-style-visibility-row"><span>Drop Cap</span><button type="button" className={`page-style-switch ${String(block.data.dropCap ?? "no") === "yes" ? "is-active" : ""}`} aria-pressed={String(block.data.dropCap ?? "no") === "yes"} onClick={() => onChange("dropCap", String(block.data.dropCap ?? "no") === "yes" ? "no" : "yes")}>{String(block.data.dropCap ?? "no") === "yes" ? "Yes" : "No"}</button></label>
+    <div className="rich-text-layout-divider" />
+    <div className="form-row"><label className="field"><span>Columns</span><select value={String(columns)} onChange={(event) => onChange("columns", Number(event.target.value))}><option value="1">Default</option><option value="2">2 columns</option><option value="3">3 columns</option><option value="4">4 columns</option><option value="5">5 columns</option><option value="6">6 columns</option></select></label><label className="field"><span>Columns Gap</span><div className="rich-text-number-with-unit"><input type="number" min="0" max="300" value={String(block.data.columnsGap ?? 24)} onChange={(event) => onChange("columnsGap", event.target.value)} /><select aria-label="Columns gap unit" value={String(block.data.columnsGapUnit ?? "px")} onChange={(event) => onChange("columnsGapUnit", event.target.value)}><option value="px">px</option><option value="%">%</option><option value="em">em</option><option value="rem">rem</option><option value="vw">vw</option></select></div></label></div>
+  </div>;
 }
 
 function BlockFields({ block, navigationMenus, forms, locations, onChange, onLayoutChange, onPreset }: { block: PageBlock; navigationMenus: NavigationMenuView[]; forms: FormDefinition[]; locations: ManagedServiceLocation[]; onChange: (key: string, value: string | number) => void; onLayoutChange: (layout: PageBlockLayout) => void; onPreset: (preset: typeof containerPresets[number]) => void }) {
@@ -508,7 +562,7 @@ function BlockFields({ block, navigationMenus, forms, locations, onChange, onLay
   if (block.type === "container") return <ContainerFields block={block} onChange={onLayoutChange} onPreset={onPreset} />;
   if (block.type === "hero") return <div className="page-builder-fields">{field("eyebrow", "Eyebrow")}{field("heading", "Heading")}{field("body", "Body copy", true)}<div className="form-row">{field("ctaLabel", "Button label")}{field("ctaHref", "Button link")}</div></div>;
   if (block.type === "heading") return <div className="page-builder-fields">{field("text", "Heading text")}<div className="form-row"><label className="field"><span>HTML tag</span><select value={String(block.data.tag ?? "h2")} onChange={(event) => onChange("tag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><label className="field"><span>Alignment</span><select value={String(block.data.alignment ?? "left")} onChange={(event) => onChange("alignment", event.target.value)}><option value="left">Start</option><option value="center">Center</option><option value="right">End</option><option value="justify">Justified</option></select></label></div><div className="form-row">{field("link", "Link URL")}<label className="field"><span>Link target</span><select value={String(block.data.linkTarget ?? "same")} onChange={(event) => onChange("linkTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label></div><label className="form-choice"><input type="checkbox" checked={String(block.data.linkNofollow ?? "no") === "yes"} onChange={(event) => onChange("linkNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow to the heading link</span></label>{field("linkAttributes", "Custom link attributes", true)}<small>One per line using <code>aria-label|Read more</code> or <code>data-track=heading</code>. Unsafe event, style, href, target, and rel attributes are ignored.</small></div>;
-  if (block.type === "rich_text") return <RichTextFields block={block} onChange={onChange} />;
+  if (block.type === "rich_text") return <><RichTextFields block={block} onChange={onChange} /><RichTextLayoutFields block={block} onChange={onChange} /></>;
   if (block.type === "image") return <div className="page-builder-fields">{mediaField("src", "Image URL", "Choose image")}{field("alt", "Alt text")}{field("caption", "Caption")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label><label className="field"><span>Image link</span><select value={String(block.data.imageLinkMode ?? "none")} onChange={(event) => onChange("imageLinkMode", event.target.value)}><option value="none">None</option><option value="media">Media file</option><option value="custom">Custom URL</option></select></label></div>{String(block.data.imageLinkMode ?? "none") === "custom" ? field("imageLink", "Custom image link") : null}<small>Choose a reusable asset or enter a direct HTTPS image URL. Resolution is retained as media metadata.</small></div>;
   if (block.type === "image_box") return <div className="page-builder-fields">{mediaField("src", "Image URL", "Choose image")}<div className="form-row"><label className="field"><span>Image resolution</span><select value={String(block.data.imageResolution ?? "full")} onChange={(event) => onChange("imageResolution", event.target.value)}><option value="thumbnail">Thumbnail</option><option value="medium">Medium</option><option value="large">Large</option><option value="full">Full</option><option value="custom">Custom</option></select></label>{field("imageLink", "Link")}</div>{field("title", "Title")}{field("description", "Description", true)}<label className="field"><span>Title HTML tag</span><select value={String(block.data.titleTag ?? "h3")} onChange={(event) => onChange("titleTag", event.target.value)}>{["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map((tag) => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}</select></label><small>The shared Style and Advanced controls below apply to the whole Image Box.</small></div>;
   if (block.type === "icon") return <div className="page-builder-fields"><div className="form-row"><label className="field"><span>Icon source</span><select value={String(block.data.iconSource ?? "fontawesome-solid")} onChange={(event) => onChange("iconSource", event.target.value)}>{iconSources.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label><label className="field"><span>View</span><select value={String(block.data.iconView ?? "default")} onChange={(event) => onChange("iconView", event.target.value)}><option value="default">Default</option><option value="stacked">Stacked</option><option value="framed">Framed</option></select></label></div><label className="field"><span>Icon library</span><select value={String(block.data.iconName ?? "sparkles")} onChange={(event) => onChange("iconName", event.target.value)}>{iconNames.map((icon) => <option key={icon.value} value={icon.value}>{icon.label}</option>)}</select></label><div className="form-row"><div>{field("iconUrl", "Custom SVG or icon asset URL")}</div><div className="field"><span>Reusable icon asset</span><MediaPicker value={String(block.data.iconUrl ?? "")} onChange={(value) => onChange("iconUrl", value)} label="Choose image or SVG" /></div></div><div className="form-row">{field("link", "Link URL")}<label className="field"><span>Link target</span><select value={String(block.data.linkTarget ?? "same")} onChange={(event) => onChange("linkTarget", event.target.value)}><option value="same">Same window</option><option value="new">New window</option></select></label></div><label className="form-choice"><input type="checkbox" checked={String(block.data.linkNofollow ?? "no") === "yes"} onChange={(event) => onChange("linkNofollow", event.target.checked ? "yes" : "no")} /><span>Add nofollow</span></label><small>Use Font Awesome Regular, Solid, or Brands icons, or choose an SVG from the Media Library. Style controls below set alignment, color, size, and rotation.</small></div>;
@@ -533,43 +587,7 @@ function BlockFields({ block, navigationMenus, forms, locations, onChange, onLay
 
 function PageBlockAdvancedFields({ block, onChange, onStyleChange }: { block: PageBlock; onChange: (key: string, value: string | number) => void; onStyleChange: (style: PageBlockStyle | undefined) => void }) {
   const style = block.style ?? {};
-  const [device, setDevice] = useState<PageStyleDevice>("desktop");
-  const [linkedEdges, setLinkedEdges] = useState<Record<"margin" | "padding", boolean>>({ margin: false, padding: false });
-  const edgeNames: Array<{ key: keyof PageStyleEdges; label: string }> = [{ key: "top", label: "Top" }, { key: "right", label: "Right" }, { key: "bottom", label: "Bottom" }, { key: "left", label: "Left" }];
-  function edgeValue(group: "margin" | "padding", edge: keyof PageStyleEdges): string {
-    const values = style[group] as PageStyleBox | undefined;
-    const deviceEdges = values?.[device] as PageStyleEdges | undefined;
-    const desktopEdges = values?.desktop as PageStyleEdges | undefined;
-    const value = deviceEdges?.[edge] ?? desktopEdges?.[edge];
-    return value === undefined ? "" : String(value);
-  }
-  function setEdge(group: "margin" | "padding", edge: keyof PageStyleEdges, raw: string) {
-    const value = raw === "" ? undefined : Number(raw);
-    const current = { ...((style[group] as PageStyleBox | undefined) ?? {}) } as Record<string, PageStyleEdges>;
-    const nextEdges = { ...(current[device] ?? {}) };
-    const nextValue = value === undefined || !Number.isFinite(value) ? undefined : Math.min(group === "margin" ? 500 : 500, Math.max(group === "margin" ? -500 : 0, value));
-    if (linkedEdges[group]) {
-      for (const item of edgeNames) {
-        if (nextValue === undefined) delete nextEdges[item.key]; else nextEdges[item.key] = nextValue;
-      }
-    } else if (nextValue === undefined) delete nextEdges[edge]; else nextEdges[edge] = nextValue;
-    if (Object.keys(nextEdges).length > 0) current[device] = nextEdges; else delete current[device];
-    onStyleChange({ ...style, [group]: Object.keys(current).length > 0 ? current : undefined });
-  }
-  function toggleEdges(group: "margin" | "padding") {
-    const next = !linkedEdges[group];
-    setLinkedEdges((current) => ({ ...current, [group]: next }));
-    if (!next) return;
-    const current = { ...((style[group] as PageStyleBox | undefined) ?? {}) } as Record<string, PageStyleEdges>;
-    current[device] = { top: 0, right: 0, bottom: 0, left: 0 };
-    onStyleChange({ ...style, [group]: current });
-  }
   const visibility = String(block.data.visibility ?? "all");
-  const responsiveDevices = [
-    ["widescreen", "Widescreen"], ["desktop", "Desktop"], ["laptop", "Laptop"],
-    ["tabletLandscape", "Tablet landscape"], ["tabletPortrait", "Tablet portrait"],
-    ["mobileLandscape", "Mobile landscape"], ["mobilePortrait", "Mobile portrait"],
-  ] as const;
   const hiddenDevices = new Set(String(block.data.hiddenDevices ?? "").split(",").map((value) => value.trim()).filter(Boolean));
   function toggleResponsiveDevice(device: string, checked: boolean) {
     const next = new Set(hiddenDevices);
@@ -578,16 +596,9 @@ function PageBlockAdvancedFields({ block, onChange, onStyleChange }: { block: Pa
   }
   return <div className="page-builder-fields page-builder-advanced-fields">
     <div className="page-container-heading"><div><strong>Advanced settings</strong><small>Optional anchors and responsive visibility for this block.</small></div><span className="page-container-badge">Optional</span></div>
-    <details className="page-builder-advanced-section" open><summary>Layout spacing</summary><div className="page-style-device-tabs" role="tablist" aria-label="Responsive spacing device"><span>Device</span>{PAGE_STYLE_DEVICES.map(({ key, label }) => <button type="button" key={key} className={device === key ? "is-active" : ""} onClick={() => setDevice(key)} role="tab" aria-selected={device === key}>{label}</button>)}</div>{(["margin", "padding"] as const).map((group) => <div className="page-style-edges" key={group}><div className="page-style-subheading"><strong>{group === "margin" ? "Margin" : "Padding"}</strong><span>{device === "desktop" ? "Desktop values" : "Device override"}<button type="button" className={`page-style-link-toggle ${linkedEdges[group] ? "is-active" : ""}`} aria-pressed={linkedEdges[group]} aria-label={`${linkedEdges[group] ? "Unlink" : "Link"} ${group} values`} title={`${linkedEdges[group] ? "Unlink" : "Link"} values`} onClick={() => toggleEdges(group)}>⛓</button></span></div><div className="page-style-edge-grid">{edgeNames.map(({ key, label }) => <label className="page-style-number" key={key}><span>{label}</span><span className="page-style-number-input"><input type="number" value={edgeValue(group, key)} min={group === "margin" ? -500 : 0} max={500} onChange={(event) => setEdge(group, key, event.target.value)} /><small>px</small></span></label>)}</div></div>)}</details>
-    <div className="page-style-grid">
-      <label className="field"><span>CSS ID</span><input id={`page-${block.id}-cssId`} value={String(block.data.cssId ?? "")} onChange={(event) => onChange("cssId", event.target.value)} placeholder="section-name" /></label>
-      <label className="field"><span>Hide on</span><select id={`page-${block.id}-visibility`} value={visibility} onChange={(event) => onChange("visibility", event.target.value)}><option value="all">All devices</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></label>
-      <label className="field"><span>Order</span><input type="number" min={-100} max={100} value={style.order ?? ""} onChange={(event) => onStyleChange({ ...style, order: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder="0" /></label>
-    </div>
-    <details className="page-builder-advanced-section" open><summary>Responsive visibility</summary><p className="field-help">Hide this block on the exact device class without changing the content on other breakpoints.</p><div className="page-style-grid">{responsiveDevices.map(([device, label]) => <label className="form-choice" key={device}><input type="checkbox" checked={hiddenDevices.has(device)} onChange={(event) => toggleResponsiveDevice(device, event.target.checked)} /><span>{label}</span></label>)}</div></details>
+    <PageBlockAdvancedStyleFields style={style} onChange={onStyleChange} hiddenDevices={hiddenDevices} onToggleResponsive={toggleResponsiveDevice} layoutFooter={<><div className="page-style-grid"><label className="field"><span>CSS ID</span><input id={`page-${block.id}-cssId`} value={String(block.data.cssId ?? "")} onChange={(event) => onChange("cssId", event.target.value)} placeholder="section-name" /></label><label className="field"><span>Hide on</span><select id={`page-${block.id}-visibility`} value={visibility} onChange={(event) => onChange("visibility", event.target.value)}><option value="all">All devices</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></label></div><small className="page-style-advanced-help page-builder-advanced-anchor-help">Use a CSS ID for an in-page anchor. The legacy Hide on field remains available for existing pages; Responsive visibility adds the full device matrix.</small></>} />
     <details className="page-builder-advanced-section"><summary>Attributes</summary><div className="page-style-grid"><label className="field"><span>ARIA label</span><input value={String(block.data.ariaLabel ?? "")} onChange={(event) => onChange("ariaLabel", event.target.value)} placeholder="Describe this section" /></label><label className="field"><span>Role</span><select value={String(block.data.role ?? "")} onChange={(event) => onChange("role", event.target.value)}><option value="">No role</option><option value="region">Region</option><option value="article">Article</option><option value="section">Section</option><option value="navigation">Navigation</option><option value="complementary">Complementary</option><option value="main">Main</option></select></label></div><label className="field"><span>Title attribute</span><input value={String(block.data.titleAttribute ?? "")} onChange={(event) => onChange("titleAttribute", event.target.value)} placeholder="Optional hover description" /></label></details>
     <details className="page-builder-advanced-section"><summary>Custom CSS</summary><label className="field"><span>Scoped CSS</span><textarea value={String(block.data.customCss ?? "")} onChange={(event) => onChange("customCss", event.target.value)} placeholder="color: #183b36;\nbackground: #f3faf7;" /></label><small>Simple selectors are scoped to this block in the live preview and published page. Unsafe imports and script-like expressions are removed.</small></details>
-    <small>Use a CSS ID for an in-page anchor. The legacy Hide on field remains available for existing pages; Responsive visibility adds the full device matrix.</small>
   </div>;
 }
 
@@ -634,6 +645,7 @@ function BlockEditor({ block, path, count, navigationMenus, forms, locations, dr
 export function PageBuilder({ page, template, headerTemplate, footerTemplate, navigationMenus = [], forms = [], locations = [] }: { page?: ContentPage; template?: SiteTemplate; headerTemplate?: SiteTemplate | null; footerTemplate?: SiteTemplate | null; navigationMenus?: NavigationMenuView[]; forms?: FormDefinition[]; locations?: ManagedServiceLocation[] }) {
   const router = useRouter();
   const previewCanvasRef = useRef<HTMLDivElement>(null);
+  const selectedInspectorRef = useRef<HTMLElement>(null);
   const isTemplate = Boolean(template);
   const [title, setTitle] = useState(() => page?.title ?? template?.name ?? "");
   const [slug, setSlug] = useState(() => page?.slug ?? "");
@@ -649,7 +661,6 @@ export function PageBuilder({ page, template, headerTemplate, footerTemplate, na
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedPanel, setSelectedPanel] = useState<"content" | "style" | "advanced">("content");
   const [pageSettingsOpen, setPageSettingsOpen] = useState(false);
-  const [seoOpen, setSeoOpen] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ blockId: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState(true);
@@ -660,6 +671,28 @@ export function PageBuilder({ page, template, headerTemplate, footerTemplate, na
 
   const selectedPath = selectedBlockId ? findBlockPath(blocks, selectedBlockId) : null;
   const selectedBlock = selectedPath ? getBlockAtPath(blocks, selectedPath) : undefined;
+
+  useEffect(() => {
+    const inspector = selectedInspectorRef.current;
+    if (!inspector || !selectedBlock) return;
+    const accordionName = selectedPanel === "style" ? "page-style-accordion" : selectedPanel === "advanced" ? "page-advanced-accordion" : "page-content-accordion";
+    const selector = selectedPanel === "style" ? "details.page-style-group" : selectedPanel === "advanced" ? "details.page-style-group, details.page-builder-advanced-section" : "details.page-builder-advanced-section";
+    inspector.querySelectorAll<HTMLDetailsElement>(selector).forEach((detail) => detail.setAttribute("name", accordionName));
+  }, [selectedBlock, selectedPanel]);
+
+  function keepAccordionOpen(event: React.SyntheticEvent<HTMLElement>) {
+    const inspector = selectedInspectorRef.current;
+    const detail = event.target;
+    if (!inspector || !(detail instanceof HTMLDetailsElement) || detail.open) return;
+    const groupName = detail.getAttribute("name");
+    if (!groupName) return;
+    const anotherOpen = Array.from(inspector.querySelectorAll<HTMLDetailsElement>("details[open]"))
+      .some((candidate) => candidate !== detail && candidate.getAttribute("name") === groupName);
+    if (anotherOpen) return;
+    requestAnimationFrame(() => {
+      if (detail.isConnected && selectedInspectorRef.current === inspector) detail.open = true;
+    });
+  }
 
   function rememberContainerForPath(path: BlockPath | null) {
     if (!path) return;
@@ -674,7 +707,6 @@ export function PageBuilder({ page, template, headerTemplate, footerTemplate, na
     if (blockId) rememberContainerForPath(findBlockPath(blocks, blockId));
     setSelectedPanel("content");
     setPageSettingsOpen(false);
-    setSeoOpen(false);
     setContextMenu(null);
   }
 
@@ -912,6 +944,23 @@ useLayoutEffect(() => {
     } catch (failure) { setError(failure instanceof Error ? failure.message : `The ${isTemplate ? "template" : "page"} could not be saved.`); } finally { setSaving(false); }
   }
 
+  const pageSettingsPanel = !template ? <>
+    {isHomepage ? <div className="page-home-badge-top" role="status"><span className="page-home-badge">Current homepage</span></div> : null}
+    <details className="panel page-builder-collapsible-panel" open={pageSettingsOpen} onToggle={(event) => setPageSettingsOpen(event.currentTarget.open)}>
+      <summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Page settings</span><strong>Page setup</strong></span></summary>
+      <div className="page-builder-settings page-builder-page-settings">
+        <div className="field"><label htmlFor="page-title">Page title</label><input id="page-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="About our studio" required /></div>
+        <div className="field"><label htmlFor="page-slug">URL slug</label><input id="page-slug" value={slug} onChange={(event) => setSlug(slugify(event.target.value))} placeholder="about-our-studio" required={Boolean(page)} /><small>Public URL: {publicPath(slug || slugify(title), isHomepage)}</small></div>
+        <div className="field"><label htmlFor="page-status">Publishing state</label><select id="page-status" value={status} onChange={(event) => { const next = event.target.value as PageStatus; setStatus(next); if (next !== "published") setIsHomepage(false); }}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></div>
+        <div className="field"><label htmlFor="page-excerpt">Excerpt</label><input id="page-excerpt" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} placeholder="A short summary for listings and previews." /></div>
+        <section className="page-builder-nested-settings page-builder-static-settings" aria-labelledby="page-seo-heading">
+          <div className="page-builder-nested-summary page-builder-static-summary"><span><span className="eyebrow">Search appearance</span><strong id="page-seo-heading">SEO fields</strong></span></div>
+          <div className="form-grid"><div className="field"><label htmlFor="page-seo-title">SEO title</label><input id="page-seo-title" value={seoTitle} onChange={(event) => setSeoTitle(event.target.value)} placeholder={title || "Page title"} /></div><div className="field"><label htmlFor="page-seo-description">SEO description</label><textarea id="page-seo-description" value={seoDescription} onChange={(event) => setSeoDescription(event.target.value)} placeholder={excerpt || "Search description"} /></div></div>
+        </section>
+      </div>
+    </details>
+  </> : null;
+
   const selectedEditLabel = selectedBlock?.type === "container" ? "Edit container" : selectedBlock ? `Edit ${blockLabel(selectedBlock).toLowerCase()}` : "Edit element";
 
   return (
@@ -931,47 +980,30 @@ useLayoutEffect(() => {
       <div className="page-builder-layout">
         <aside className="page-builder-sidebar" aria-label="Page tools and settings">
           <div className="page-builder-page-name" aria-label={isTemplate ? "Current template" : "Current page"}><h2>{title || (isTemplate ? "Untitled template" : "Untitled page")}</h2><span>{isTemplate ? `${template?.kind} template` : slug ? `/${slug}` : "No slug yet"}</span></div>
+          {pageSettingsPanel}
           {!selectedBlock ? <section className="panel page-block-library">
             <div className="panel-header">
-              <div><span className="eyebrow">Elements</span><h2 className="panel-title">Add content</h2><p className="page-builder-library-help">Start with a container, or drop a widget below a section to create a full-width container automatically.</p></div>
-              <span className="page-builder-block-count">{blockLibrary.length}</span>
+              <div className="page-builder-library-heading"><span className="eyebrow">Elements</span><h2 className="panel-title">Add content</h2></div>
+              <p className="page-builder-library-help">Start with a container, or drop a widget below a section to create a full-width container automatically.</p>
             </div>
-            <div className="page-builder-panel-tabs" aria-label="Element categories"><span className="is-active">Widgets</span><span>Globals</span></div>
+            <div className="page-builder-panel-tabs" aria-label="Element categories"><span className="is-active">Widgets</span></div>
             {(["layout", "basic"] as const).map((category) => <div className="page-builder-library-group" key={category}><div className="page-builder-library-group-heading"><span>{category === "layout" ? "Layout" : "Basic"}</span><small>{category === "layout" ? "Start with a container" : "Drop inside, or create one below"}</small></div>{blockLibrary.filter((item) => item.category === category).map((item) => { const Icon = item.icon; return <button type="button" draggable aria-label={`${item.label}: ${item.description}`} title={item.description} className={`page-block-library-item ${paletteDragKey === item.key ? "is-dragging" : ""}`} key={item.key} onClick={() => addBlock(item)} onDragStart={(event) => handleLibraryDragStart(event, item)} onDragEnd={handleLibraryDragEnd}><span className="page-block-icon"><Icon size={18} /></span><span><strong>{item.shortLabel ?? item.label}</strong><small>{item.description}</small></span><ArrowRight size={14} /></button>; })}</div>)}
           </section> : null}
-          {selectedBlock && selectedPath ? <section className="panel page-builder-selected-inspector" aria-label="Selected element settings">
+          {selectedBlock && selectedPath ? <section ref={selectedInspectorRef} className="panel page-builder-selected-inspector" aria-label="Selected element settings" onToggle={keepAccordionOpen}>
             <div className="panel-header page-builder-inspector-header"><div><span className="eyebrow">Selected element</span><h2 className="panel-title">{blockLabel(selectedBlock)}</h2><small className="row-meta">Edit the selected item from the live canvas.</small></div><button type="button" className="icon-button" aria-label="Clear selected element" onClick={() => selectBlock(null)}><X size={15} /></button></div>
             <div className="page-builder-selected-view-switcher" role="tablist" aria-label="Selected element controls"><button type="button" role="tab" aria-selected={selectedPanel === "content"} className={selectedPanel === "content" ? "is-active" : ""} onClick={() => setSelectedPanel("content")}>{selectedBlock.type === "container" ? "Layout" : "Content"}</button><button type="button" role="tab" aria-selected={selectedPanel === "style"} className={selectedPanel === "style" ? "is-active" : ""} onClick={() => setSelectedPanel("style")}>Style</button><button type="button" role="tab" aria-selected={selectedPanel === "advanced"} className={selectedPanel === "advanced" ? "is-active" : ""} onClick={() => setSelectedPanel("advanced")}>Advanced</button></div>
-            {selectedPanel === "content" ? <BlockFields block={selectedBlock} navigationMenus={navigationMenus} forms={forms} locations={locations} onChange={(key, value) => updateBlock(selectedPath, key, value)} onLayoutChange={(layout) => updateBlockLayout(selectedPath, layout)} onPreset={(preset) => applyPreset(selectedPath, preset)} /> : selectedPanel === "style" ? <PageBlockStyleFields block={selectedBlock} onChange={(style) => updateBlockStyle(selectedPath, style)} /> : <PageBlockAdvancedFields block={selectedBlock} onChange={(key, value) => updateBlock(selectedPath, key, value)} onStyleChange={(style) => updateBlockStyle(selectedPath, style)} />}
+            {selectedPanel === "content" ? <BlockFields block={selectedBlock} navigationMenus={navigationMenus} forms={forms} locations={locations} onChange={(key, value) => updateBlock(selectedPath, key, value)} onLayoutChange={(layout) => updateBlockLayout(selectedPath, layout)} onPreset={(preset) => applyPreset(selectedPath, preset)} /> : selectedPanel === "style" ? <PageBlockStyleFields block={selectedBlock} onChange={(style) => updateBlockStyle(selectedPath, style)} showDeviceTabs={false} /> : <PageBlockAdvancedFields block={selectedBlock} onChange={(key, value) => updateBlock(selectedPath, key, value)} onStyleChange={(style) => updateBlockStyle(selectedPath, style)} />}
           </section> : null}
           {!selectedBlock || selectedPanel === "content" ? <>
             {template ? <details className="panel page-builder-collapsible-panel" open><summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Template settings</span><strong>{template.kind === "header" ? "Header" : "Footer"} setup</strong></span></summary><div className="page-builder-settings"><div className="field"><label htmlFor="template-name">Template name</label><input id="template-name" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Marketing header" required /></div><div className="field"><label htmlFor="template-status">Publishing state</label><select id="template-status" value={status} onChange={(event) => { const next = event.target.value as PageStatus; setStatus(next); if (next !== "published") setIsActive(false); }}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></div><div className="page-homepage-control"><label className="form-choice" htmlFor="template-active"><input id="template-active" type="checkbox" checked={isActive} disabled={status !== "published"} onChange={(event) => setIsActive(event.target.checked)} /><span><strong>Use this as the active {template.kind}</strong><small>Saving this choice deactivates the other published {template.kind} template.</small></span></label>{isActive ? <span className="page-home-badge">Active on public site</span> : null}</div></div></details> : null}
-            {!template ? <>
-            <details className="panel page-builder-collapsible-panel" open={pageSettingsOpen} onToggle={(event) => setPageSettingsOpen(event.currentTarget.open)}>
-              <summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Page settings</span><strong>Page setup</strong></span></summary>
-              <div className="page-builder-settings">
-                <div className="field"><label htmlFor="page-title">Page title</label><input id="page-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="About our studio" required /></div>
-                <div className="field"><label htmlFor="page-slug">URL slug</label><input id="page-slug" value={slug} onChange={(event) => setSlug(slugify(event.target.value))} placeholder="about-our-studio" required={Boolean(page)} /><small>Public URL: {publicPath(slug || slugify(title), isHomepage)}</small></div>
-                <div className="field"><label htmlFor="page-status">Publishing state</label><select id="page-status" value={status} onChange={(event) => { const next = event.target.value as PageStatus; setStatus(next); if (next !== "published") setIsHomepage(false); }}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></div>
-                <div className="field"><label htmlFor="page-excerpt">Excerpt</label><input id="page-excerpt" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} placeholder="A short summary for listings and previews." /></div>
-                <div className="page-homepage-control"><label className="form-choice" htmlFor="page-homepage"><input id="page-homepage" type="checkbox" checked={isHomepage} disabled={status !== "published"} onChange={(event) => setIsHomepage(event.target.checked)} /><span><strong>Use this page as the homepage</strong><small>Published pages marked here appear at the site root. Saving a different page moves the homepage designation.</small></span></label>{isHomepage ? <span className="page-home-badge">Current homepage</span> : null}</div>
-              </div>
-            </details>
-            <details className="panel page-seo-panel page-builder-collapsible-panel" open={seoOpen} onToggle={(event) => setSeoOpen(event.currentTarget.open)}>
-              <summary className="page-builder-collapsible-summary"><span><span className="eyebrow">Search appearance</span><strong>SEO fields</strong></span></summary>
-              <div className="form-grid"><div className="field"><label htmlFor="page-seo-title">SEO title</label><input id="page-seo-title" value={seoTitle} onChange={(event) => setSeoTitle(event.target.value)} placeholder={title || "Page title"} /></div><div className="field"><label htmlFor="page-seo-description">SEO description</label><textarea id="page-seo-description" value={seoDescription} onChange={(event) => setSeoDescription(event.target.value)} placeholder={excerpt || "Search description"} /></div></div>
-            </details>
-            </> : null}
           </> : null}
         </aside>
         <section className="page-builder-main" aria-label="Page canvas">
-          <div className="page-builder-stage-header"><div><span className="eyebrow">Live canvas</span><h2 className="panel-title">{page ? "Edit your page" : "Build your page"}</h2></div><span className="row-meta">{blocks.length} top-level block{blocks.length === 1 ? "" : "s"}</span></div>
-          {preview ? <div className="page-preview-panel page-builder-live-preview" onClick={handlePreviewClick} onContextMenu={handlePreviewContextMenu} onDragOver={handlePreviewDragOver} onDrop={handlePreviewDrop}>
-            <div className="page-preview-label"><span className="eyebrow">Live preview</span><span>{selectedBlock ? `${blockLabel(selectedBlock)} selected` : "Click a section to edit"}</span></div>
-            <div className="page-preview-canvas-shell" ref={previewCanvasRef}>
-              {headerTemplate ? <div className="page-preview-template-shell page-preview-template-header" data-page-editor-template-href={isFallbackSiteTemplate(headerTemplate) ? undefined : `/admin/appearance/templates/${headerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global header</span>{isFallbackSiteTemplate(headerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${headerTemplate.id}/edit`} className="panel-link">Edit header</Link>}</div><PageRenderer blocks={headerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind="header" /></div> : null}
-              {blocks.length > 0 ? <div className="page-preview-page-content"><PageRenderer blocks={blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind={template?.kind} /></div> : <div className="page-preview-empty"><LayoutTemplate size={22} /><strong>Start with a layout</strong><span>Drag Container or Grid here, or drop a widget to create a full-width container.</span></div>}
-              {footerTemplate ? <div className="page-preview-template-shell page-preview-template-footer" data-page-editor-template-href={isFallbackSiteTemplate(footerTemplate) ? undefined : `/admin/appearance/templates/${footerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global footer</span>{isFallbackSiteTemplate(footerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${footerTemplate.id}/edit`} className="panel-link">Edit footer</Link>}</div><PageRenderer blocks={footerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind="footer" /></div> : null}
+          {preview ? <div className={`page-preview-panel page-builder-live-preview${blocks.length === 0 ? " is-blank-preview" : ""}`} onClick={handlePreviewClick} onContextMenu={handlePreviewContextMenu} onDragOver={handlePreviewDragOver} onDrop={handlePreviewDrop}>
+            <div className={`page-preview-canvas-shell${blocks.length === 0 ? " is-blank-canvas" : ""}`} ref={previewCanvasRef}>
+              {blocks.length > 0 && headerTemplate ? <div className="page-preview-template-shell page-preview-template-header" data-page-editor-template-href={isFallbackSiteTemplate(headerTemplate) ? undefined : `/admin/appearance/templates/${headerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global header</span>{isFallbackSiteTemplate(headerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${headerTemplate.id}/edit`} className="panel-link">Edit header</Link>}</div><PageRenderer blocks={headerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind="header" /></div> : null}
+              {blocks.length > 0 ? <div className="page-preview-page-content"><PageRenderer blocks={blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind={template?.kind} /></div> : <div className="page-preview-empty page-preview-blank-canvas" role="region" aria-label="Blank HTML canvas" />}
+              {blocks.length > 0 && footerTemplate ? <div className="page-preview-template-shell page-preview-template-footer" data-page-editor-template-href={isFallbackSiteTemplate(footerTemplate) ? undefined : `/admin/appearance/templates/${footerTemplate.id}/edit`}><div className="page-preview-template-toolbar"><span>Global footer</span>{isFallbackSiteTemplate(footerTemplate) ? <span className="row-meta">Built-in fallback · apply migration to edit</span> : <Link href={`/admin/appearance/templates/${footerTemplate.id}/edit`} className="panel-link">Edit footer</Link>}</div><PageRenderer blocks={footerTemplate.blocks} navigationMenus={navigationMenus} forms={forms} locations={locations} editorMode templateKind="footer" /></div> : null}
               {selectedBlock && selectedPath && selectionBox ? <div className="page-preview-selection" style={{ top: selectionBox.top, left: selectionBox.left, width: selectionBox.width, height: selectionBox.height }} aria-label={`${blockLabel(selectedBlock)} selected`}><div className="page-preview-selection-handle" onClick={(event) => event.stopPropagation()}><button type="button" className="page-preview-selection-edit" aria-label={selectedEditLabel} title={selectedEditLabel} data-tooltip={selectedEditLabel} onClick={() => selectBlock(selectedBlock.id)}><Pencil size={13} aria-hidden="true" /></button><button type="button" className="page-preview-selection-delete" aria-label={`Delete ${blockLabel(selectedBlock).toLowerCase()}`} title="Delete" data-tooltip="Delete" onClick={() => deleteBlock(selectedPath)}><X size={14} aria-hidden="true" /></button></div></div> : null}
               {contextMenu ? (() => {
                 const contextPath = findBlockPath(blocks, contextMenu.blockId);
@@ -985,8 +1017,6 @@ useLayoutEffect(() => {
               })() : null}
             </div>
           </div> : null}
-          <div className="page-builder-build-header"><div><span className="eyebrow">Drag and drop</span><strong>Page structure</strong><small>Drag blocks to reorder sections, then edit their content below.</small></div><span className="page-builder-build-count">{blocks.length}</span></div>
-          <div className="page-builder-canvas" aria-label="Draggable page blocks">{blocks.length === 0 ? <div className="page-builder-empty"><Plus size={20} /><h2>Start building your page</h2><p>Choose Container or Grid from Elements, then drag content into it on the live canvas.</p></div> : blocks.map((block, index) => <BlockEditor key={block.id} block={block} path={[index]} count={blocks.length} navigationMenus={navigationMenus} forms={forms} locations={locations} dragPath={dragPath} selectedPath={selectedPath} onSelect={(path) => { const selected = getBlockAtPath(blocks, path); if (selected) selectBlock(selected.id); }} onChange={updateBlock} onStyleChange={updateBlockStyle} onLayoutChange={updateBlockLayout} onPreset={applyPreset} onAddChild={addChild} onMove={moveBlock} onDuplicate={duplicateBlock} onDelete={deleteBlock} onDragStart={setDragPath} onDragEnd={() => setDragPath(null)} onDropBefore={dropBefore} onDropInto={dropInto} />)}</div>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {message ? <p className="form-success" role="status">{message}</p> : null}
         </section>

@@ -155,9 +155,14 @@ function RichTextBlock({ block }: { block: PageBlock }) {
   const sizes: Record<string, string> = { small: "0.9rem", medium: "1rem", large: "1.2rem", xlarge: "1.5rem" };
   const alignments = new Set(["left", "center", "right", "justify"]);
   const textAlign = text(block.data.textAlign);
-  const textColor = /^#[0-9a-f]{6}$/i.test(text(block.data.textColor)) ? text(block.data.textColor) : undefined;
+  const styleTextColor = block.style?.typography?.textColor;
+  const textColor = !styleTextColor && /^#[0-9a-f]{6}$/i.test(text(block.data.textColor)) ? text(block.data.textColor) : undefined;
+  const columns = Math.min(6, Math.max(1, Number(block.data.columns) || 1));
+  const columnsGap = Math.min(300, Math.max(0, Number(block.data.columnsGap) || 24));
+  const dropCap = String(block.data.dropCap ?? "no") === "yes";
+  const bodyStyle: CSSProperties = { columnCount: columns > 1 ? columns : undefined, columnGap: columns > 1 ? `${columnsGap}${String(block.data.columnsGapUnit ?? "px")}` : undefined };
   const inlineStyle: CSSProperties = { color: textColor, fontSize: sizes[text(block.data.fontSize)] ?? undefined, textAlign: alignments.has(textAlign) ? textAlign as CSSProperties["textAlign"] : undefined };
-  return <section className="content-block content-block-rich-text" {...styledProps(block, inlineStyle)}>{text(block.data.heading) ? <h2>{text(block.data.heading)}</h2> : null}{hasMarkup ? <div className="rich-text-body" dangerouslySetInnerHTML={{ __html: safeBody }} /> : paragraphs(body)}</section>;
+  return <section className="content-block content-block-rich-text" {...styledProps(block, inlineStyle)}>{text(block.data.heading) ? <h2>{text(block.data.heading)}</h2> : null}{hasMarkup ? <div className={`rich-text-body ${dropCap ? "rich-text-drop-cap" : ""}`} style={bodyStyle} dangerouslySetInnerHTML={{ __html: safeBody }} /> : <div className={`rich-text-body ${dropCap ? "rich-text-drop-cap" : ""}`} style={bodyStyle}>{paragraphs(body)}</div>}</section>;
 }
 
 function HeadingBlock({ block }: { block: PageBlock }) {
